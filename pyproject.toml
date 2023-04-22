@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "pydantic-view"
-version = "0.1.0"
+version = "0.1.1"
 description = "View decorator to create the child pydantic models from the root model."
 authors = ["Roman Koshel <roma.koshel@gmail.com>"]
 license = "MIT"
@@ -23,6 +23,9 @@ python = "^3.8"
 
 
 [tool.poetry.group.test.dependencies]
+ipdb = "*"
+fastapi = "*"
+httpx = "*"
 pytest = "*"
 
 

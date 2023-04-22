@@ -2,6 +2,7 @@ from typing import List, Optional, Tuple
 
 import pytest
 from pydantic import BaseModel, Field, ValidationError
+
 from pydantic_view import view
 
 

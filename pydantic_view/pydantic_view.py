@@ -56,6 +56,9 @@ def view(
                 return tp
 
             for k, v in fields.items():
+                if v.sub_fields:
+                    for sub_field in v.sub_fields:
+                        sub_field.type_ = update_type(sub_field.type_)
                 v.type_ = update_type(v.type_)
                 v.prepare()
 
