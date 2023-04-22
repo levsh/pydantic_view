@@ -1,0 +1,31 @@
+[tool.poetry]
+name = "pydantic-view"
+version = "0.1.0"
+description = "View decorator to create the child pydantic models from the root model."
+authors = ["Roman Koshel <roma.koshel@gmail.com>"]
+license = "MIT"
+readme = "README.md"
+keywords = ["pydantic", "model", "view", "utils"]
+packages = [{include = "pydantic_view"}]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Programming Language :: Python",
+    "Programming Language :: Python :: 3 :: Only",
+    "Framework :: Pydantic",
+    "Topic :: Software Development :: Libraries :: Python Modules",
+    "Topic :: Utilities",
+    "License :: OSI Approved :: MIT License",
+]
+
+[tool.poetry.dependencies]
+pydantic = "*"
+python = "^3.8"
+
+
+[tool.poetry.group.test.dependencies]
+pytest = "*"
+
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
