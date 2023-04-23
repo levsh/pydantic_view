@@ -30,15 +30,15 @@ In [1]: from uuid import UUID, uuid4
 In [2]: user = User(id=0, username="human", password="iamaman", address="Earth")
    ...: user.Out()
    ...: 
-Out[2]: Out(id=0, username='human', address='Earth')
+Out[2]: UserOut(id=0, username='human', address='Earth')
 
 In [3]: User.Update(id=0, username="human", password="iamasuperman", address="Earth")
    ...: 
-Out[3]: Update(id=0, username='human', password='iamasuperman', address='Earth')
+Out[3]: UserUpdate(id=0, username='human', password='iamasuperman', address='Earth')
 
 In [4]: User.Patch(id=0, address="Mars")
    ...: 
-Out[4]: Patch(id=0, username=None, password=None, address='Mars')
+Out[4]: UserPatch(id=0, username=None, password=None, address='Mars')
 ```
 
 

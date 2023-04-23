@@ -128,3 +128,9 @@ def test_model():
     assert not hasattr(view_o, "c")
     assert not hasattr(view_o, "d")
     assert not hasattr(view_o, "e")
+
+
+def test__str():
+    assert f"{Model.ViewA}" == "<class 'tests.test_1_view.ModelViewA'>"
+    model = Model(a=0, b="b", c=[SubModel(aa=1, bb="bb", cc=[1, 2]), {"aa": 2, "bb": "BB", "cc": [3, 4]}])
+    assert f"{model.ViewA}" == "<class 'tests.test_1_view.ModelViewA'>"

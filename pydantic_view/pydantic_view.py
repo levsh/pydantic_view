@@ -1,4 +1,5 @@
 from copy import deepcopy
+from types import prepare_class
 from typing import Dict, Set, _GenericAlias
 
 from pydantic import BaseModel
@@ -79,7 +80,11 @@ def view(
 
                         super(owner, self).__init__(**kwds)
 
-                    cache[cache_key] = type(name, (cls,), {"__init__": __init__, "__fields__": fields})
+                    view_cls_name = f"{cls.__name__}{name}"
+                    meta, namespace, kwds = prepare_class(view_cls_name, (cls,))
+                    namespace.update({"__module__": cls.__module__, "__init__": __init__, "__fields__": fields})
+
+                    cache[cache_key] = meta(view_cls_name, (cls,), namespace)
 
                 return cache[cache_key]
 
