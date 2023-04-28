@@ -51,11 +51,11 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from pydantic import BaseModel, Field
 
-from pydantic_view import view
+from pydantic_view import view, view_validator
 
 
 @view("Out", exclude=["secret"])
-@view("Create", exclude=["id"])
+@view("Create", exclude=["id"], config={"extra": "forbid"})
 @view("Update", exclude=["id"])
 @view("UpdateMany")
 @view("Patch", exclude=["id"], optional=["name", "secret"])
@@ -65,9 +65,20 @@ class Group(BaseModel):
     name: str
     secret: str = None
 
+    @view_validator(["Create", "Update", "UpdateMany", "Patch", "PatchMany"], "name", allow_reuse=True)
+    def validate_name(cls, v):
+        if v == "admin":
+            raise ValueError("Invalid name")
+        return v
+
 
 @view("Out", exclude=["password"], recursive=True)
-@view("Create", exclude=["id"], optional_ex={"groups": Field(default_factory=lambda: [Group(id=0, name="default")])})
+@view(
+    "Create",
+    exclude=["id"],
+    optional_ex={"groups": Field(default_factory=lambda: [Group(id=0, name="default")])},
+    config={"extra": "forbid"},
+)
 @view("Update", exclude=["id"])
 @view("UpdateMany")
 @view("Patch", exclude=["id"], optional=["username", "password", "groups"])

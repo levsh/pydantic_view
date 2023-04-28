@@ -3,33 +3,31 @@ from typing import List, Optional, Tuple
 import pytest
 from pydantic import BaseModel, Field, ValidationError
 
-from pydantic_view import view
-
-
-@view("ViewA", exclude=["aa", "dd"])
-@view("ViewR", include=["cc"])
-class SubModel(BaseModel):
-    aa: int
-    bb: str
-    cc: List[int]
-    dd: int = None
-    ee: Optional[str]
-
-
-@view("ViewA", exclude=["a", "d"])
-@view("ViewB", exclude=["c"], optional=["b"])
-@view("ViewC", include=["a"])
-@view("ViewR", include=["c"], recursive=True)
-@view("ViewO", include=["a", "b"], optional=["a"], optional_ex={"b": Field(default_factory=lambda: "B")})
-class Model(BaseModel):
-    a: int
-    b: str
-    c: Tuple[SubModel, SubModel]
-    d: int = None
-    e: Optional[str]
+from pydantic_view import view, view_validator
 
 
 def test_model():
+    @view("ViewA", exclude=["aa", "dd"])
+    @view("ViewR", include=["cc"])
+    class SubModel(BaseModel):
+        aa: int
+        bb: str
+        cc: List[int]
+        dd: int = None
+        ee: Optional[str]
+
+    @view("ViewA", exclude=["a", "d"])
+    @view("ViewB", exclude=["c"], optional=["b"])
+    @view("ViewC", include=["a"])
+    @view("ViewR", include=["c"], recursive=True)
+    @view("ViewO", include=["a", "b"], optional=["a"], optional_ex={"b": Field(default_factory=lambda: "B")})
+    class Model(BaseModel):
+        a: int
+        b: str
+        c: Tuple[SubModel, SubModel]
+        d: int = None
+        e: Optional[str]
+
     assert hasattr(Model, "ViewA")
     assert hasattr(Model, "ViewB")
     assert issubclass(Model.ViewA, Model)
@@ -131,6 +129,43 @@ def test_model():
 
 
 def test__str():
-    assert f"{Model.ViewA}" == "<class 'tests.test_1_view.ModelViewA'>"
-    model = Model(a=0, b="b", c=[SubModel(aa=1, bb="bb", cc=[1, 2]), {"aa": 2, "bb": "BB", "cc": [3, 4]}])
-    assert f"{model.ViewA}" == "<class 'tests.test_1_view.ModelViewA'>"
+    @view("View")
+    class Model(BaseModel):
+        i: int = None
+
+    assert f"{Model.View}" == "<class 'tests.test_1_view.ModelView'>"
+    model = Model()
+    assert f"{model.View}" == "<class 'tests.test_1_view.ModelView'>"
+
+
+def test_view_validator():
+    @view("View")
+    class Model(BaseModel):
+        i: int = None
+        s: str = None
+
+        @view_validator(["View"], "s")
+        def validate_s(cls, v, values):
+            if v is not None and v != "ok":
+                raise ValueError
+            return v
+
+    Model(a=1)
+    Model(s="ok")
+    Model(s="not ok")
+
+    Model(a=1).View()
+    Model(s="ok").View()
+    with pytest.raises(ValidationError):
+        Model(s="not ok").View()
+
+
+def test_view_config():
+    @view("View", config={"extra": "forbid"})
+    class Model(BaseModel):
+        i: int = None
+        s: str = None
+
+    Model(f=1.0)
+    with pytest.raises(ValidationError):
+        Model.View(f=1.0)
