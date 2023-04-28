@@ -53,7 +53,7 @@ def view(
             def update_type(tp):
                 if isinstance(tp, _GenericAlias):
                     tp.__args__ = tuple(update_type(arg) for arg in tp.__args__)
-                elif issubclass(tp, BaseModel) and hasattr(tp, name):
+                elif isinstance(tp, type) and issubclass(tp, BaseModel) and hasattr(tp, name):
                     tp = getattr(tp, name)
                 return tp
 

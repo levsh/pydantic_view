@@ -1,4 +1,4 @@
-from typing import List, Optional, Tuple
+from typing import Any, ForwardRef, List, Optional, Tuple
 
 import pytest
 from pydantic import BaseModel, Field, ValidationError
@@ -169,3 +169,35 @@ def test_view_config():
     Model(f=1.0)
     with pytest.raises(ValidationError):
         Model.View(f=1.0)
+
+
+def test_view_any_type():
+    @view("View")
+    class Model(BaseModel):
+        a: Any
+
+    Model.View
+    Model.View(a=1)
+    Model(a=1).View()
+
+
+F = ForwardRef("F")
+
+
+@view("View")
+class Model(BaseModel):
+    f: "F"
+
+
+@view("View")
+class F(BaseModel):
+    f: float
+
+
+Model.update_forward_refs()
+
+
+def test_view_forward_refs_type():
+    assert Model.View
+    assert Model.View(f={"f": 0.0}).f.f == 0.0
+    assert Model(f={"f": 0.0}).View().f.f == 0.0
