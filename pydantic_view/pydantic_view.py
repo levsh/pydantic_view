@@ -11,6 +11,7 @@ def view(
     include: Set[str] = None,
     exclude: Set[str] = None,
     optional: Set[str] = None,
+    optional_not_none: Set[str] = None,
     fields: Dict[str, Union[Type, FieldInfo, Tuple[Type, FieldInfo]]] = None,
     recursive: bool = None,
     config=None,
@@ -21,6 +22,8 @@ def view(
         exclude = set()
     if not optional:
         optional = set()
+    if not optional_not_none:
+        optional_not_none = set()
     if not fields:
         fields = {}
     if recursive is None:
@@ -31,9 +34,10 @@ def view(
     def wrapper(
         cls,
         name=name,
-        include=include,
-        exclude=exclude,
-        optional=optional,
+        include=set(include),
+        exclude=set(exclude),
+        optional=set(optional),
+        optional_not_none=set(optional_not_none),
         fields=fields,
         recursive=recursive,
         config=config,
@@ -41,16 +45,14 @@ def view(
         if include and exclude:
             raise ValueError("include and exclude cannot be used together")
 
-        include = set(include) or set(cls.__fields__.keys())
-        exclude = set(exclude)
+        include = include or set(cls.__fields__.keys())
 
         __fields__ = {}
 
-        for field_name in optional:
-            if field_name not in cls.__fields__:
-                raise Exception(f"View has not field '{field_name}'")
-            if field_name in fields:
-                raise Exception(f"Same field in optional and fields_config: {field_name}")
+        if (optional & optional_not_none) | (optional & set(fields.keys())) | (optional_not_none & set(fields.keys())):
+            raise Exception("Field should only present in the one of optional, optional_not_none or fields")
+
+        for field_name in optional | optional_not_none:
             if (field := cls.__fields__.get(field_name)) is None:
                 raise Exception(f"Model has not field '{field_name}'")
             __fields__[field_name] = (Optional[field.outer_type_], field.field_info)
@@ -87,6 +89,10 @@ def view(
         )
 
         Base.__fields__ = {k: v for k, v in Base.__fields__.items() if k in include and k not in exclude}
+
+        for field_name in optional_not_none:
+            if field := Base.__fields__.get(field_name):
+                field.allow_none = False
 
         if recursive is True:
 

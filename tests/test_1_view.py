@@ -209,3 +209,15 @@ def test_view_forward_refs_type():
     assert Model.View
     assert Model.View(f={"f": 0.0}).f.f == 0.0
     assert Model(f={"f": 0.0}).View().f.f == 0.0
+
+
+def test_view_optional_not_none():
+    @view("View", optional_not_none=["y"])
+    class Model(BaseModel):
+        x: int
+        y: str
+
+    model = Model.View(x=0)
+    assert model.y is None
+    with pytest.raises(ValidationError):
+        Model.View(x=0, y=None)
