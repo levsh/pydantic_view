@@ -2,7 +2,7 @@ from copy import deepcopy
 from types import prepare_class, resolve_bases
 from typing import Dict, List, Set, _GenericAlias
 
-from pydantic import BaseConfig, BaseModel, validator
+from pydantic import BaseConfig, BaseModel, root_validator, validator
 from pydantic.config import inherit_config
 from pydantic.fields import FieldInfo
 
@@ -68,7 +68,15 @@ def view(
 
         for attr_name, attr in cls.__dict__.items():
             if getattr(attr, "_is_view_validator", None) and name in attr._view_validator_view_names:
-                validators[attr_name] = validator(*attr._view_validator_args, **attr._view_validator_kwds)(attr)
+                validators[attr_name] = validator(
+                    *attr._view_validator_args,
+                    **attr._view_validator_kwds,
+                )(attr)
+            elif getattr(attr, "_is_view_root_validator", None) and name in attr._view_root_validator_view_names:
+                validators[attr_name] = root_validator(
+                    *attr._view_root_validator_args,
+                    **attr._view_root_validator_kwds,
+                )(attr)
 
         cache = {}
 
@@ -133,6 +141,17 @@ def view_validator(view_names: List[str], *validator_args, **validator_kwds):
         fn._view_validator_view_names = view_names
         fn._view_validator_args = validator_args
         fn._view_validator_kwds = validator_kwds
+        return fn
+
+    return wrapper
+
+
+def view_root_validator(view_names: List[str], *validator_args, **validator_kwds):
+    def wrapper(fn):
+        fn._is_view_root_validator = True
+        fn._view_root_validator_view_names = view_names
+        fn._view_root_validator_args = validator_args
+        fn._view_root_validator_kwds = validator_kwds
         return fn
 
     return wrapper

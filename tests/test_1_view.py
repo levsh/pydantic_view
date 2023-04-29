@@ -3,7 +3,7 @@ from typing import Any, ForwardRef, List, Optional, Tuple
 import pytest
 from pydantic import BaseModel, Field, ValidationError
 
-from pydantic_view import view, view_validator
+from pydantic_view import view, view_root_validator, view_validator
 
 
 def test_model():
@@ -150,14 +150,22 @@ def test_view_validator():
                 raise ValueError
             return v
 
-    Model(a=1)
+        @view_root_validator(["View"])
+        def root_validate(cls, values):
+            if values.get("i") == 1 and values.get("s") == "a":
+                raise ValueError
+            return values
+
+    Model(i=1)
     Model(s="ok")
     Model(s="not ok")
 
-    Model(a=1).View()
+    Model(i=1).View()
     Model(s="ok").View()
     with pytest.raises(ValidationError):
         Model(s="not ok").View()
+    with pytest.raises(ValidationError):
+        Model(i=1, s="a").View()
 
 
 def test_view_config():
