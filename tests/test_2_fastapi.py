@@ -29,13 +29,14 @@ class Group(BaseModel):
 @view(
     "Create",
     exclude=["id"],
-    optional_ex={"groups": Field(default_factory=lambda: [Group(id=0, name="default")])},
+    fields={"groups": Field(default_factory=lambda: [Group(id=0, name="default")])},
     config={"extra": "forbid"},
+    recursive=True,
 )
-@view("Update", exclude=["id"])
-@view("UpdateMany")
-@view("Patch", exclude=["id"], optional=["username", "password", "groups"])
-@view("PatchMany", optional=["username", "password", "groups"])
+@view("Update", exclude=["id"], recursive=True)
+@view("UpdateMany", recursive=True)
+@view("Patch", exclude=["id"], optional=["username", "password", "groups"], recursive=True)
+@view("PatchMany", optional=["username", "password", "groups"], recursive=True)
 class User(BaseModel):
     id: int
     username: str
@@ -97,7 +98,7 @@ def test_fastapi():
             "password": "admin",
         },
     )
-    assert response.status_code == 200
+    assert response.status_code == 200, response.text
     assert response.json() == {
         "id": 0,
         "username": "admin",
@@ -106,7 +107,7 @@ def test_fastapi():
 
     # GET
     response = client.get("/users/0")
-    assert response.status_code == 200
+    assert response.status_code == 200, response.text
     assert response.json() == {
         "id": 0,
         "username": "admin",
@@ -121,7 +122,7 @@ def test_fastapi():
             "groups": [],
         },
     )
-    assert response.status_code == 200
+    assert response.status_code == 200, response.text
     assert response.json() == {
         "id": 0,
         "username": "superadmin",
@@ -139,7 +140,7 @@ def test_fastapi():
             }
         ],
     )
-    assert response.status_code == 200
+    assert response.status_code == 200, response.text
     assert response.json() == [
         {
             "id": 0,
@@ -149,7 +150,7 @@ def test_fastapi():
     ]
 
     response = client.patch("/users/0", json={"id": 0, "username": "guest"})
-    assert response.status_code == 200
+    assert response.status_code == 200, response.text
     assert response.json() == {
         "id": 0,
         "username": "guest",
@@ -157,7 +158,7 @@ def test_fastapi():
     }
 
     response = client.patch("/users", json=[{"id": 0, "groups": []}])
-    assert response.status_code == 200
+    assert response.status_code == 200, response.text
     assert response.json() == [
         {
             "id": 0,

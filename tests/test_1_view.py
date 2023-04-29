@@ -20,7 +20,7 @@ def test_model():
     @view("ViewB", exclude=["c"], optional=["b"])
     @view("ViewC", include=["a"])
     @view("ViewR", include=["c"], recursive=True)
-    @view("ViewO", include=["a", "b"], optional=["a"], optional_ex={"b": Field(default_factory=lambda: "B")})
+    @view("ViewO", include=["a", "b"], optional=["a"], fields={"b": Field(default_factory=lambda: "B")})
     class Model(BaseModel):
         a: int
         b: str

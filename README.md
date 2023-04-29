@@ -76,13 +76,14 @@ class Group(BaseModel):
 @view(
     "Create",
     exclude=["id"],
-    optional_ex={"groups": Field(default_factory=lambda: [Group(id=0, name="default")])},
+    fields={"groups": Field(default_factory=lambda: [Group(id=0, name="default")])},
     config={"extra": "forbid"},
+    recursive=True,
 )
-@view("Update", exclude=["id"])
-@view("UpdateMany")
-@view("Patch", exclude=["id"], optional=["username", "password", "groups"])
-@view("PatchMany", optional=["username", "password", "groups"])
+@view("Update", exclude=["id"], recursive=True)
+@view("UpdateMany", recursive=True)
+@view("Patch", exclude=["id"], optional=["username", "password", "groups"], recursive=True)
+@view("PatchMany", optional=["username", "password", "groups"], recursive=True)
 class User(BaseModel):
     id: int
     username: str
