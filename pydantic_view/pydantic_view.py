@@ -85,7 +85,7 @@ def view(
                                 raise TypeError()
                             kwds = {k: v for k, v in obj.dict().items() if k in include_ and k not in exclude_}
 
-                        super(owner, self).__init__(**kwds)
+                        super(cls, self).__init__(**kwds)
 
                     view_cls_name = f"{cls.__name__}{name}"
 
