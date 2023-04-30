@@ -1,9 +1,11 @@
-from types import prepare_class, resolve_bases
 from typing import Dict, List, Optional, Set, Tuple, Type, Union, _GenericAlias
 
-from pydantic import BaseConfig, BaseModel, create_model, root_validator, validator
-from pydantic.config import inherit_config
+from pydantic import BaseModel, create_model, root_validator, validator
 from pydantic.fields import FieldInfo
+
+
+class CustomDict(dict):
+    pass
 
 
 def view(
@@ -81,17 +83,24 @@ def view(
                     **attr._view_root_validator_kwds,
                 )(attr)
 
-        Base = create_model(
-            f"{cls.__name__}{name}Base",
+        view_cls_name = f"{cls.__name__}{name}"
+
+        view_cls = create_model(
+            view_cls_name,
+            __module__=cls.__module__,
             __base__=(cls,),
             __validators__=__validators__,
             **__fields__,
         )
 
-        Base.__fields__ = {k: v for k, v in Base.__fields__.items() if k in include and k not in exclude}
+        if config:
+            config_cls = type("Config", (cls.Config,), config)
+            view_cls = type(view_cls_name, (view_cls,), {"Config": config_cls})
+
+        view_cls.__fields__ = {k: v for k, v in view_cls.__fields__.items() if k in include and k not in exclude}
 
         for field_name in optional_not_none:
-            if field := Base.__fields__.get(field_name):
+            if field := view_cls.__fields__.get(field_name):
                 field.allow_none = False
 
         if recursive is True:
@@ -103,51 +112,42 @@ def view(
                     tp = getattr(tp, name)
                 return tp
 
-            for k, v in Base.__fields__.items():
+            for k, v in view_cls.__fields__.items():
                 if v.sub_fields:
                     for sub_field in v.sub_fields:
                         sub_field.type_ = update_type(sub_field.type_)
+                        # sub_field.outer_type_ = update_type(sub_field.outer_type_)
+                        sub_field.prepare()
                 v.type_ = update_type(v.type_)
+                # v.outer_type_ = update_type(v.outer_type_)
                 v.prepare()
-
-        cache = {}
 
         class ViewDesc:
             def __get__(self, obj, owner=None):
-                nonlocal cache
+                if obj:
+                    if not hasattr(obj.__dict__, f"_{view_cls_name}"):
 
-                cache_key = f"{id(obj)}{type(obj)}{id(owner)}"
-                if cache_key not in cache:
-
-                    def __init__(self, **kwds):
-                        if obj is not None:
-                            if kwds:
-                                raise TypeError()
+                        def __init__(self):
                             kwds = {k: v for k, v in obj.dict().items() if k in include and k not in exclude}
+                            super(cls, self).__init__(**kwds)
 
-                        super(cls, self).__init__(**kwds)
+                        object.__setattr__(obj, "__dict__", CustomDict(**obj.__dict__))
+                        setattr(
+                            obj.__dict__,
+                            f"_{view_cls_name}",
+                            type(
+                                view_cls_name,
+                                (view_cls,),
+                                {
+                                    "__module__": cls.__module__,
+                                    "__init__": __init__,
+                                },
+                            ),
+                        )
 
-                    view_cls_name = f"{cls.__name__}{name}"
+                    return getattr(obj.__dict__, f"_{view_cls_name}")
 
-                    bases = resolve_bases((Base,))
-                    meta, ns, kwds = prepare_class(view_cls_name, bases)
-
-                    namespace = {}
-                    namespace.update(
-                        {
-                            "__module__": cls.__module__,
-                            "__init__": __init__,
-                            "Config": inherit_config(type("Config", (), config), BaseConfig),
-                        }
-                    )
-
-                    namespace.update(ns)
-
-                    view_cls = meta(view_cls_name, bases, namespace, **kwds)
-
-                    cache[cache_key] = view_cls
-
-                return cache[cache_key]
+                return view_cls
 
         setattr(cls, name, ViewDesc())
 

@@ -1,178 +1,251 @@
-from typing import Any, ForwardRef, List, Optional, Tuple
+from typing import Any, ForwardRef, List
 
 import pytest
-from pydantic import BaseModel, Field, ValidationError
+from pydantic import BaseModel, ValidationError, root_validator, validator
 
 from pydantic_view import view, view_root_validator, view_validator
 
 
-def test_model():
-    @view("ViewA", exclude=["aa", "dd"])
-    @view("ViewR", include=["cc"])
-    class SubModel(BaseModel):
-        aa: int
-        bb: str
-        cc: List[int]
-        dd: int = None
-        ee: Optional[str]
-
-    @view("ViewA", exclude=["a", "d"])
-    @view("ViewB", exclude=["c"], optional=["b"])
-    @view("ViewC", include=["a"])
-    @view("ViewR", include=["c"], recursive=True)
-    @view("ViewO", include=["a", "b"], optional=["a"], fields={"b": Field(default_factory=lambda: "B")})
-    class Model(BaseModel):
-        a: int
-        b: str
-        c: Tuple[SubModel, SubModel]
-        d: int = None
-        e: Optional[str]
-
-    assert hasattr(Model, "ViewA")
-    assert hasattr(Model, "ViewB")
-    assert issubclass(Model.ViewA, Model)
-    assert issubclass(Model.ViewA, BaseModel)
-    assert issubclass(Model.ViewB, Model)
-    assert issubclass(Model.ViewB, BaseModel)
-    assert issubclass(Model.ViewC, Model)
-    assert issubclass(Model.ViewC, BaseModel)
-    assert Model.ViewA != Model.ViewB != Model.ViewC
-
-    with pytest.raises(ValidationError):
-        Model()
-
-    model = Model(a=0, b="b", c=[SubModel(aa=1, bb="bb", cc=[1, 2]), {"aa": 2, "bb": "BB", "cc": [3, 4]}])
-
-    assert issubclass(Model, BaseModel)
-    assert isinstance(model, Model)
-    assert isinstance(model, BaseModel)
-    assert model.a == 0
-    assert model.b == "b"
-    assert model.c == (SubModel(aa=1, bb="bb", cc=[1, 2]), SubModel(aa=2, bb="BB", cc=[3, 4]))
-    assert model.d is None
-    assert model.e is None
-
-    assert hasattr(model, "ViewA")
-    assert hasattr(model, "ViewB")
-    assert hasattr(model, "ViewC")
-    assert issubclass(model.ViewA, Model)
-    assert issubclass(model.ViewA, BaseModel)
-    assert issubclass(model.ViewB, Model)
-    assert issubclass(model.ViewB, BaseModel)
-    assert issubclass(model.ViewC, Model)
-    assert issubclass(model.ViewC, BaseModel)
-    assert model.ViewA != model.ViewB != model.ViewC
-
-    view_a = model.ViewA()
-    assert isinstance(view_a, model.ViewA)
-    assert isinstance(view_a, BaseModel)
-    assert not hasattr(view_a, "a")
-    assert not hasattr(view_a, "d")
-    assert view_a.b == "b"
-    assert view_a.c == (SubModel(aa=1, bb="bb", cc=[1, 2]), SubModel(aa=2, bb="BB", cc=[3, 4]))
-    assert view_a.e is None
-    assert view_a.dict() == {
-        "b": "b",
-        "c": (
-            {"aa": 1, "bb": "bb", "cc": [1, 2], "dd": None, "ee": None},
-            {"aa": 2, "bb": "BB", "cc": [3, 4], "dd": None, "ee": None},
-        ),
-        "e": None,
-    }
-
-    with pytest.raises(ValidationError):
-        Model.ViewB()
-
-    view_b = Model.ViewB(a=0, e="e")
-    assert view_b.a == 0
-    assert view_b.b is None
-    assert not hasattr(view_b, "c")
-    assert view_b.d is None
-    assert view_b.e == "e"
-
-    view_c = model.ViewC()
-    assert view_c.a == 0
-    assert not hasattr(view_c, "b")
-    assert not hasattr(view_c, "c")
-    assert not hasattr(view_c, "d")
-    assert not hasattr(view_c, "e")
-
-    view_r = model.ViewR()
-    assert not hasattr(view_r, "a")
-    assert not hasattr(view_r, "b")
-    assert not hasattr(view_r, "d")
-    assert not hasattr(view_r, "e")
-    assert not hasattr(view_r.c[0], "aa")
-    assert not hasattr(view_r.c[0], "bb")
-    assert not hasattr(view_r.c[0], "dd")
-    assert not hasattr(view_r.c[0], "ee")
-    assert view_r.c[0].cc == [1, 2]
-    assert not hasattr(view_r.c[1], "aa")
-    assert not hasattr(view_r.c[1], "bb")
-    assert not hasattr(view_r.c[1], "dd")
-    assert not hasattr(view_r.c[1], "ee")
-    assert view_r.c[1].cc == [3, 4]
-
-    view_o = model.ViewO()
-    assert view_o.a == 0
-    assert view_o.b == "b"
-    assert not hasattr(view_o, "c")
-    assert not hasattr(view_o, "d")
-    assert not hasattr(view_o, "e")
-
-    view_o = Model.ViewO()
-    assert view_o.a is None
-    assert view_o.b == "B"
-    assert not hasattr(view_o, "c")
-    assert not hasattr(view_o, "d")
-    assert not hasattr(view_o, "e")
-
-
-def test__str():
+def test_base():
     @view("View")
     class Model(BaseModel):
-        i: int = None
+        x: int
+
+    assert Model.View
+    assert Model.View(x=0)
+    assert hasattr(Model.View(x=0), "x")
+    assert not hasattr(Model.View(x=0), "y")
+    assert Model.View(x=0).x == 0
+    assert Model.View(x=0).dict() == {"x": 0}
+
+    with pytest.raises(TypeError):
+        Model(x=1).View(x=0)
+    assert Model(x=1).View
+    assert Model(x=1).View()
+    assert hasattr(Model(x=1).View(), "x")
+    assert not hasattr(Model(x=1).View(), "y")
+    assert Model(x=1).View().x == 1
+    assert Model(x=1).View().dict() == {"x": 1}
+
+
+def test_same_id():
+    @view("View")
+    class Model(BaseModel):
+        x: int
+
+    assert id(Model.View) == id(Model.View)
+    assert id(Model(x=1).View) != id(Model(x=1).View)
+    model = Model(x=1)
+    assert id(model.View) == id(model.View)
+
+
+def test_include():
+    @view("View", include=["x"])
+    class Model(BaseModel):
+        x: int
+        y: int
+
+    assert Model.View
+    assert Model.View(x=0)
+    assert hasattr(Model.View(x=0), "x")
+    assert not hasattr(Model.View(x=0), "y")
+    assert Model.View(x=0).x == 0
+    assert Model.View(x=0).dict() == {"x": 0}
+
+    with pytest.raises(TypeError):
+        Model(x=1, y=2).View(x=0)
+    assert Model(x=1, y=2).View
+    assert Model(x=1, y=2).View()
+    assert hasattr(Model(x=1, y=2).View(), "x")
+    assert not hasattr(Model(x=1, y=2).View(), "y")
+    assert Model(x=1, y=2).View().x == 1
+    assert Model(x=1, y=2).View().dict() == {"x": 1}
+
+
+def test_exclude():
+    @view("View", exclude=["y"])
+    class Model(BaseModel):
+        x: int
+        y: int
+
+    assert Model.View
+    assert Model.View(x=0)
+    assert hasattr(Model.View(x=0), "x")
+    assert not hasattr(Model.View(x=0), "y")
+    assert Model.View(x=0).x == 0
+    assert Model.View(x=0).dict() == {"x": 0}
+
+    with pytest.raises(TypeError):
+        Model(x=1, y=2).View(x=0)
+    assert Model(x=1, y=2).View
+    assert Model(x=1, y=2).View()
+    assert hasattr(Model(x=1, y=2).View(), "x")
+    assert not hasattr(Model(x=1, y=2).View(), "y")
+    assert Model(x=1, y=2).View().x == 1
+    assert Model(x=1, y=2).View().dict() == {"x": 1}
+
+
+def test_optional():
+    @view("View", optional=["y"])
+    class Model(BaseModel):
+        x: int
+        y: int
+
+    assert Model.View
+    assert Model.View(x=0)
+    assert hasattr(Model.View(x=0), "x")
+    assert hasattr(Model.View(x=0), "y")
+    assert Model.View(x=0).x == 0
+    assert Model.View(x=0).y is None
+    assert Model.View(x=0).dict() == {"x": 0, "y": None}
+    assert Model.View(x=0, y=1).x == 0
+    assert Model.View(x=0, y=1).y == 1
+    assert Model.View(x=0, y=1).dict() == {"x": 0, "y": 1}
+    assert Model.View(x=0, y=None).x == 0
+    assert Model.View(x=0, y=None).y is None
+    assert Model.View(x=0, y=None).dict() == {"x": 0, "y": None}
+
+    with pytest.raises(TypeError):
+        Model(x=0, y=1).View(x=0)
+    assert Model(x=0, y=1).View
+    assert Model(x=0, y=1).View()
+    assert hasattr(Model(x=0, y=1).View(), "x")
+    assert hasattr(Model(x=0, y=1).View(), "y")
+    assert Model(x=0, y=1).View().x == 0
+    assert Model(x=0, y=1).View().y == 1
+    assert Model(x=0, y=1).View().dict() == {"x": 0, "y": 1}
+
+
+def test_optional_not_none():
+    @view("View", optional_not_none=["y"])
+    class Model(BaseModel):
+        x: int
+        y: int
+
+    assert Model.View
+    assert Model.View(x=0)
+    assert hasattr(Model.View(x=0), "x")
+    assert hasattr(Model.View(x=0), "y")
+    assert Model.View(x=0).x == 0
+    assert Model.View(x=0).y is None
+    assert Model.View(x=0).dict() == {"x": 0, "y": None}
+    assert Model.View(x=0, y=1).x == 0
+    assert Model.View(x=0, y=1).y == 1
+    assert Model.View(x=0, y=1).dict() == {"x": 0, "y": 1}
+    with pytest.raises(ValidationError):
+        assert Model.View(x=0, y=None)
+
+    with pytest.raises(TypeError):
+        Model(x=0, y=1).View(x=0)
+    assert Model(x=0, y=1).View
+    assert Model(x=0, y=1).View()
+    assert hasattr(Model(x=0, y=1).View(), "x")
+    assert hasattr(Model(x=0, y=1).View(), "y")
+    assert Model(x=0, y=1).View().x == 0
+    assert Model(x=0, y=1).View().y == 1
+    assert Model(x=0, y=1).View().dict() == {"x": 0, "y": 1}
+
+
+def test_recursive():
+    @view("View", include=["x"])
+    class SubModel(BaseModel):
+        x: int
+        y: int
+
+    @view("View", recursive=True)
+    class Model(BaseModel):
+        x: int
+        submodel: SubModel
+
+    model = Model(x=0, submodel=SubModel(x=0, y=1))
+    model_view = model.View()
+    assert model_view.x == 0
+    assert model_view.submodel
+    assert type(model_view.submodel) == SubModel.View
+    assert model_view.submodel.x == 0
+    assert not hasattr(model_view.submodel, "y")
+
+
+def test_recursive_list():
+    @view("View", include=["x"])
+    class SubModel(BaseModel):
+        x: int
+        y: int
+
+    @view("View", recursive=True)
+    class Model(BaseModel):
+        x: int
+        submodels: List[SubModel]
+
+    model = Model(x=0, submodels=[SubModel(x=0, y=1)])
+    model_view = model.View()
+    assert model_view.x == 0
+    assert model_view.submodels
+    assert type(model_view.submodels[0]) == SubModel.View
+    assert model_view.submodels[0].x == 0
+    assert not hasattr(model_view.submodels[0], "y")
+
+
+def test_str():
+    @view("View")
+    class Model(BaseModel):
+        x: int = None
 
     assert f"{Model.View}" == "<class 'tests.test_1_view.ModelView'>"
     model = Model()
     assert f"{model.View}" == "<class 'tests.test_1_view.ModelView'>"
+    assert f"{model}" == "x=None"
 
 
-def test_view_validator():
+def test_validator():
     @view("View")
     class Model(BaseModel):
         i: int = None
         s: str = None
 
-        @view_validator(["View"], "s")
-        def validate_s(cls, v, values):
-            if v is not None and v != "ok":
+        @validator("i")
+        def validate_i(cls, v):
+            if v == 0:
+                raise ValueError
+            return v
+
+        @root_validator
+        def root_validate(cls, values):
+            if values.get("i") == 1 and values.get("s") == "1":
+                raise ValueError
+            return values
+
+        @view_validator(["View"], "i")
+        def view_validate_i(cls, v):
+            if v == 2:
                 raise ValueError
             return v
 
         @view_root_validator(["View"])
-        def root_validate(cls, values):
-            if values.get("i") == 1 and values.get("s") == "a":
+        def view_root_validate(cls, values):
+            if values.get("i") == 3 and values.get("s") == "3":
                 raise ValueError
             return values
 
+    with pytest.raises(ValidationError):
+        Model(i=0)
     Model(i=1)
-    Model(s="ok")
-    Model(s="not ok")
+    with pytest.raises(ValidationError):
+        Model(i=1, s="1")
+    Model(i=1, s="2")
 
+    with pytest.raises(ValidationError):
+        Model(i=2).View()
     Model(i=1).View()
-    Model(s="ok").View()
     with pytest.raises(ValidationError):
-        Model(s="not ok").View()
-    with pytest.raises(ValidationError):
-        Model(i=1, s="a").View()
+        Model(i=3, s="3").View()
+    Model(i=3, s="4").View()
 
 
 def test_view_config():
     @view("View", config={"extra": "forbid"})
     class Model(BaseModel):
         i: int = None
-        s: str = None
 
     Model(f=1.0)
     with pytest.raises(ValidationError):
@@ -203,21 +276,10 @@ class F(BaseModel):
 
 
 Model.update_forward_refs()
+Model.View.update_forward_refs()
 
 
 def test_view_forward_refs_type():
     assert Model.View
     assert Model.View(f={"f": 0.0}).f.f == 0.0
     assert Model(f={"f": 0.0}).View().f.f == 0.0
-
-
-def test_view_optional_not_none():
-    @view("View", optional_not_none=["y"])
-    class Model(BaseModel):
-        x: int
-        y: str
-
-    model = Model.View(x=0)
-    assert model.y is None
-    with pytest.raises(ValidationError):
-        Model.View(x=0, y=None)
