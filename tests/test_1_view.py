@@ -242,7 +242,7 @@ def test_validator():
     Model(i=3, s="4").View()
 
 
-def test_view_config():
+def test_config():
     @view("View", config={"extra": "forbid"})
     class Model(BaseModel):
         i: int = None
@@ -252,7 +252,7 @@ def test_view_config():
         Model.View(f=1.0)
 
 
-def test_view_any_type():
+def test_any_type():
     @view("View")
     class Model(BaseModel):
         a: Any
@@ -279,7 +279,53 @@ Model.update_forward_refs()
 Model.View.update_forward_refs()
 
 
-def test_view_forward_refs_type():
+def test_forward_refs_type():
     assert Model.View
     assert Model.View(f={"f": 0.0}).f.f == 0.0
     assert Model(f={"f": 0.0}).View().f.f == 0.0
+
+
+def test_extra():
+    @view("ViewExtraForbid", extra="forbid")
+    @view("ViewExtraIgnore", extra="ignore")
+    class Model(BaseModel):
+        x: int
+
+    Model.ViewExtraIgnore(x=0)
+    Model.ViewExtraForbid(x=0)
+
+    Model.ViewExtraIgnore(x=0, y=1)
+    with pytest.raises(ValidationError):
+        Model.ViewExtraForbid(x=0, y=1)
+
+
+def test_subviews():
+    @view("ViewA")
+    @view("ViewB", include=["x"])
+    class Model(BaseModel):
+        x: int
+        y: int
+
+    assert Model.ViewA
+    assert Model.ViewA(x=0, y=1)
+    model = Model(x=0, y=1)
+    assert hasattr(model.ViewA(), "x")
+    assert model.ViewA().x == 0
+    assert model.ViewA().y == 1
+
+    assert Model.ViewB
+    assert Model.ViewB(x=0, y=1)
+    model = Model(x=0, y=1)
+    assert hasattr(model.ViewB(), "x")
+    assert model.ViewB().x == 0
+    assert not hasattr(model.ViewB(), "y")
+
+    model = Model(x=0, y=1)
+    assert hasattr(Model.ViewA, "ViewB")
+    assert hasattr(model.ViewA, "ViewB")
+    assert model.ViewA().ViewB()
+    assert hasattr(model.ViewA().ViewB(), "x")
+    assert model.ViewA().ViewB().x == 0
+    assert not hasattr(model.ViewA().ViewB(), "y")
+    assert hasattr(Model.ViewB, "ViewA")
+    assert hasattr(model.ViewB, "ViewA")

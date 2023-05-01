@@ -1,6 +1,6 @@
 from typing import Dict, List, Optional, Set, Tuple, Type, Union, _GenericAlias
 
-from pydantic import BaseModel, create_model, root_validator, validator
+from pydantic import BaseModel, Extra, create_model, root_validator, validator
 from pydantic.fields import FieldInfo
 
 
@@ -16,6 +16,7 @@ def view(
     optional_not_none: Set[str] = None,
     fields: Dict[str, Union[Type, FieldInfo, Tuple[Type, FieldInfo]]] = None,
     recursive: bool = None,
+    extra: Extra = None,
     config=None,
 ):
     if not include:
@@ -85,11 +86,16 @@ def view(
 
         view_cls_name = f"{cls.__name__}{name}"
 
+        __cls_kwargs__ = {}
+        if extra:
+            __cls_kwargs__["extra"] = extra
+
         view_cls = create_model(
             view_cls_name,
             __module__=cls.__module__,
             __base__=(cls,),
             __validators__=__validators__,
+            __cls_kwargs__=__cls_kwargs__,
             **__fields__,
         )
 
