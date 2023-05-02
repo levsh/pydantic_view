@@ -1,7 +1,7 @@
 from typing import Any, ForwardRef, List
 
 import pytest
-from pydantic import BaseModel, ValidationError, root_validator, validator
+from pydantic import BaseModel, BaseSettings, ValidationError, root_validator, validator
 
 from pydantic_view import view, view_root_validator, view_validator
 
@@ -329,3 +329,38 @@ def test_subviews():
     assert not hasattr(model.ViewA().ViewB(), "y")
     assert hasattr(Model.ViewB, "ViewA")
     assert hasattr(model.ViewB, "ViewA")
+
+
+def test_settings():
+    @view("View")
+    @view("ViewValidate")
+    class Model(BaseSettings):
+        x: int
+
+        @view_validator(["ViewValidate"], "x")
+        def validate_x(cls, v):
+            if v == 0:
+                raise ValueError
+            return v
+
+    assert Model.View
+    assert Model.View(x=0)
+    assert hasattr(Model.View(x=0), "x")
+    assert not hasattr(Model.View(x=0), "y")
+    assert Model.View(x=0).x == 0
+    assert Model.View(x=0).dict() == {"x": 0}
+
+    with pytest.raises(TypeError):
+        Model(x=1).View(x=0)
+    assert Model(x=1).View
+    assert Model(x=1).View()
+    assert hasattr(Model(x=1).View(), "x")
+    assert not hasattr(Model(x=1).View(), "y")
+    assert Model(x=1).View().x == 1
+    assert Model(x=1).View().dict() == {"x": 1}
+
+    assert Model.ViewValidate
+    with pytest.raises(ValidationError):
+        assert Model.ViewValidate(x=0)
+    with pytest.raises(ValidationError):
+        assert Model(x=0).ViewValidate()

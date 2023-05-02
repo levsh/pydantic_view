@@ -118,15 +118,22 @@ def view(
                     tp = getattr(tp, name)
                 return tp
 
-            for k, v in view_cls.__fields__.items():
-                if v.sub_fields:
-                    for sub_field in v.sub_fields:
-                        sub_field.type_ = update_type(sub_field.type_)
-                        # sub_field.outer_type_ = update_type(sub_field.outer_type_)
-                        sub_field.prepare()
-                v.type_ = update_type(v.type_)
-                # v.outer_type_ = update_type(v.outer_type_)
-                v.prepare()
+            def update_field_type(field):
+                if field.sub_fields:
+                    for sub_field in field.sub_fields:
+                        update_field_type(sub_field)
+                else:
+                    field.type_ = update_type(field.type_)
+                    field.prepare()
+                if (
+                    isinstance(field.default_factory, type)
+                    and issubclass(field.default_factory, BaseModel)
+                    and hasattr(field.default_factory, name)
+                ):
+                    field.default_factory = getattr(field.default_factory, name)
+
+            for field in view_cls.__fields__.values():
+                update_field_type(field)
 
         class ViewDesc:
             def __get__(self, obj, owner=None):
