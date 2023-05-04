@@ -99,6 +99,17 @@ def view(
             **__fields__,
         )
 
+        class RootClsDesc:
+            def __get__(self, obj, owner=None):
+                return cls
+
+        class ViewNameClsDesc:
+            def __get__(self, obj, owner=None):
+                return name
+
+        setattr(view_cls, "__view_name__", ViewNameClsDesc())
+        setattr(view_cls, "__root_cls__", RootClsDesc())
+
         if config:
             config_cls = type("Config", (cls.Config,), config)
             view_cls = type(view_cls_name, (view_cls,), {"Config": config_cls})

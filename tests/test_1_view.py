@@ -17,6 +17,10 @@ def test_base():
     assert not hasattr(Model.View(x=0), "y")
     assert Model.View(x=0).x == 0
     assert Model.View(x=0).dict() == {"x": 0}
+    assert hasattr(Model.View, "__view_name__")
+    assert Model.View.__view_name__ == "View"
+    assert hasattr(Model.View, "__root_cls__")
+    assert Model.View.__root_cls__ == Model
 
     with pytest.raises(TypeError):
         Model(x=1).View(x=0)
@@ -26,6 +30,10 @@ def test_base():
     assert not hasattr(Model(x=1).View(), "y")
     assert Model(x=1).View().x == 1
     assert Model(x=1).View().dict() == {"x": 1}
+    assert hasattr(Model(x=1).View, "__view_name__")
+    assert Model(x=1).View.__view_name__ == "View"
+    assert hasattr(Model(x=1).View, "__root_cls__")
+    assert Model(x=1).View.__root_cls__ == Model
 
 
 def test_same_id():
