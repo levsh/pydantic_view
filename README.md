@@ -16,10 +16,10 @@ In [1]: from uuid import UUID, uuid4
    ...: from pydantic_view import view
    ...: 
    ...: 
-   ...: @view("Create", exclude=["id"])
+   ...: @view("Create", exclude={"id"})
    ...: @view("Update")
-   ...: @view("Patch", optional=["username", "password", "address"])
-   ...: @view("Out", exclude=["password"])
+   ...: @view("Patch", optional={"username", "password", "address"})
+   ...: @view("Out", exclude={"password"})
    ...: class User(BaseModel):
    ...:     id: int
    ...:     username: str
@@ -54,12 +54,12 @@ from pydantic import BaseModel, Field
 from pydantic_view import view, view_validator
 
 
-@view("Out", exclude=["secret"])
-@view("Create", exclude=["id"], config={"extra": "forbid"})
-@view("Update", exclude=["id"])
+@view("Out", exclude={"secret"})
+@view("Create", exclude={"id"}, config={"extra": "forbid"})
+@view("Update", exclude={"id"})
 @view("UpdateMany")
-@view("Patch", exclude=["id"], optional=["name", "secret"])
-@view("PatchMany", optional=["name", "secret"])
+@view("Patch", exclude={"id"}, optional={"name", "secret"})
+@view("PatchMany", optional={"name", "secret"})
 class Group(BaseModel):
     id: int
     name: str
@@ -72,18 +72,18 @@ class Group(BaseModel):
         return v
 
 
-@view("Out", exclude=["password"], recursive=True)
+@view("Out", exclude={"password"}, recursive=True)
 @view(
     "Create",
-    exclude=["id"],
+    exclude={"id"},
     fields={"groups": Field(default_factory=lambda: [Group(id=0, name="default")])},
     config={"extra": "forbid"},
     recursive=True,
 )
-@view("Update", exclude=["id"], recursive=True)
+@view("Update", exclude={"id"}, recursive=True)
 @view("UpdateMany", recursive=True)
-@view("Patch", exclude=["id"], optional=["username", "password", "groups"], recursive=True)
-@view("PatchMany", optional=["username", "password", "groups"], recursive=True)
+@view("Patch", exclude={"id"}, optional={"username", "password", "groups"}, recursive=True)
+@view("PatchMany", optional={"username", "password", "groups"}, recursive=True)
 class User(BaseModel):
     id: int
     username: str

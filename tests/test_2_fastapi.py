@@ -7,12 +7,12 @@ from pydantic import BaseModel, Field
 from pydantic_view import view, view_validator
 
 
-@view("Out", exclude=["secret"])
-@view("Create", exclude=["id"], config={"extra": "forbid"})
-@view("Update", exclude=["id"])
+@view("Out", exclude={"secret"})
+@view("Create", exclude={"id"}, config={"extra": "forbid"})
+@view("Update", exclude={"id"})
 @view("UpdateMany")
-@view("Patch", exclude=["id"], optional=["name", "secret"])
-@view("PatchMany", optional=["name", "secret"])
+@view("Patch", exclude={"id"}, optional={"name", "secret"})
+@view("PatchMany", optional={"name", "secret"})
 class Group(BaseModel):
     id: int
     name: str
@@ -25,7 +25,7 @@ class Group(BaseModel):
         return v
 
 
-@view("Out", exclude=["password"], recursive=True)
+@view("Out", exclude={"password"}, recursive=True)
 @view(
     "Create",
     exclude=["id"],
@@ -33,10 +33,10 @@ class Group(BaseModel):
     config={"extra": "forbid"},
     recursive=True,
 )
-@view("Update", exclude=["id"], recursive=True)
+@view("Update", exclude={"id"}, recursive=True)
 @view("UpdateMany", recursive=True)
-@view("Patch", exclude=["id"], optional=["username", "password", "groups"], recursive=True)
-@view("PatchMany", optional=["username", "password", "groups"], recursive=True)
+@view("Patch", exclude={"id"}, optional={"username", "password", "groups"}, recursive=True)
+@view("PatchMany", optional={"username", "password", "groups"}, recursive=True)
 class User(BaseModel):
     id: int
     username: str

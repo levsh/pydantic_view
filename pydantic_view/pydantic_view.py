@@ -19,28 +19,26 @@ def view(
     extra: Extra = None,
     config=None,
 ):
-    if not include:
+    if include is None:
         include = set()
-    if not exclude:
+    if exclude is None:
         exclude = set()
-    if not optional:
+    if optional is None:
         optional = set()
-    if not optional_not_none:
+    if optional_not_none is None:
         optional_not_none = set()
-    if not fields:
+    if fields is None:
         fields = {}
-    if recursive is None:
-        recursive = None
     if config is None:
         config = {}
 
     def wrapper(
         cls,
         name=name,
-        include=set(include),
-        exclude=set(exclude),
-        optional=set(optional),
-        optional_not_none=set(optional_not_none),
+        include=include,
+        exclude=exclude,
+        optional=optional,
+        optional_not_none=optional_not_none,
         fields=fields,
         recursive=recursive,
         config=config,
@@ -115,6 +113,10 @@ def view(
             view_cls = type(view_cls_name, (view_cls,), {"Config": config_cls})
 
         view_cls.__fields__ = {k: v for k, v in view_cls.__fields__.items() if k in include and k not in exclude}
+
+        for field_name in optional:
+            if field := view_cls.__fields__.get(field_name):
+                field.required = False
 
         for field_name in optional_not_none:
             if field := view_cls.__fields__.get(field_name):

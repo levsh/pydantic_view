@@ -48,7 +48,7 @@ def test_same_id():
 
 
 def test_include():
-    @view("View", include=["x"])
+    @view("View", include={"x"})
     class Model(BaseModel):
         x: int
         y: int
@@ -71,7 +71,7 @@ def test_include():
 
 
 def test_exclude():
-    @view("View", exclude=["y"])
+    @view("View", exclude={"y"})
     class Model(BaseModel):
         x: int
         y: int
@@ -94,7 +94,7 @@ def test_exclude():
 
 
 def test_optional():
-    @view("View", optional=["y"])
+    @view("View", optional={"y"})
     class Model(BaseModel):
         x: int
         y: int
@@ -125,7 +125,7 @@ def test_optional():
 
 
 def test_optional_not_none():
-    @view("View", optional_not_none=["y"])
+    @view("View", optional_not_none={"y"})
     class Model(BaseModel):
         x: int
         y: int
@@ -155,7 +155,7 @@ def test_optional_not_none():
 
 
 def test_recursive():
-    @view("View", include=["x"])
+    @view("View", include={"x"})
     class SubModel(BaseModel):
         x: int
         y: int
@@ -175,7 +175,7 @@ def test_recursive():
 
 
 def test_recursive_list():
-    @view("View", include=["x"])
+    @view("View", include={"x"})
     class SubModel(BaseModel):
         x: int
         y: int
@@ -309,7 +309,7 @@ def test_extra():
 
 def test_subviews():
     @view("ViewA")
-    @view("ViewB", include=["x"])
+    @view("ViewB", include={"x"})
     class Model(BaseModel):
         x: int
         y: int
