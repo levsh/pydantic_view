@@ -114,7 +114,7 @@ def view(
 
         view_cls.__fields__ = {k: v for k, v in view_cls.__fields__.items() if k in include and k not in exclude}
 
-        for field_name in optional:
+        for field_name in optional | optional_not_none:
             if field := view_cls.__fields__.get(field_name):
                 field.required = False
 
