@@ -1,7 +1,7 @@
 from typing import Any, ForwardRef, List
 
 import pytest
-from pydantic import BaseModel, BaseSettings, ValidationError, root_validator, validator
+from pydantic import BaseModel, BaseSettings, SecretStr, ValidationError, root_validator, validator
 
 from pydantic_view import view, view_root_validator, view_validator
 
@@ -372,3 +372,24 @@ def test_settings():
         assert Model.ViewValidate(x=0)
     with pytest.raises(ValidationError):
         assert Model(x=0).ViewValidate()
+
+
+def test_base_view():
+    @view("OutShowSecrets", base_view="Out", include={"secret"}, fields={"secret": str})
+    @view("Out")
+    class Model(BaseModel):
+        i: int
+        secret: SecretStr
+
+        @view_validator(["OutShowSecrets"], "secret", pre=True)
+        def validate_secret(cls, v):
+            if hasattr(v, "get_secret_value"):
+                v = v.get_secret_value()
+            return v
+
+    assert Model.Out
+    assert Model.OutShowSecrets
+    assert issubclass(Model.OutShowSecrets, Model.Out)
+    assert not hasattr(Model.OutShowSecrets(secret="secret"), "i")
+    assert Model.OutShowSecrets(secret="abc").secret == "abc"
+    assert Model(i=0, secret="abc").OutShowSecrets().secret == "abc"

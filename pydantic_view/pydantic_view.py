@@ -10,6 +10,7 @@ class CustomDict(dict):
 
 def view(
     name: str,
+    base_view: str = None,
     include: Set[str] = None,
     exclude: Set[str] = None,
     optional: Set[str] = None,
@@ -43,10 +44,15 @@ def view(
         recursive=recursive,
         config=config,
     ):
+        if base_view:
+            base = getattr(cls, base_view)
+        else:
+            base = cls
+
         if include and exclude:
             raise ValueError("include and exclude cannot be used together")
 
-        include = include or set(cls.__fields__.keys())
+        include = include or set(base.__fields__.keys())
 
         __fields__ = {}
 
@@ -54,12 +60,12 @@ def view(
             raise Exception("Field should only present in the one of optional, optional_not_none or fields")
 
         for field_name in optional | optional_not_none:
-            if (field := cls.__fields__.get(field_name)) is None:
+            if (field := base.__fields__.get(field_name)) is None:
                 raise Exception(f"Model has not field '{field_name}'")
             __fields__[field_name] = (Optional[field.outer_type_], field.field_info)
 
         for field_name, value in fields.items():
-            if (field := cls.__fields__.get(field_name)) is None:
+            if (field := base.__fields__.get(field_name)) is None:
                 raise Exception(f"Model has not field '{field_name}'")
             if isinstance(value, (tuple, list)):
                 __fields__[field_name] = value
@@ -91,7 +97,7 @@ def view(
         view_cls = create_model(
             view_cls_name,
             __module__=cls.__module__,
-            __base__=(cls,),
+            __base__=(base,),
             __validators__=__validators__,
             __cls_kwargs__=__cls_kwargs__,
             **__fields__,
@@ -109,7 +115,7 @@ def view(
         setattr(view_cls, "__root_cls__", RootClsDesc())
 
         if config:
-            config_cls = type("Config", (cls.Config,), config)
+            config_cls = type("Config", (base.Config,), config)
             view_cls = type(view_cls_name, (view_cls,), {"Config": config_cls})
 
         view_cls.__fields__ = {k: v for k, v in view_cls.__fields__.items() if k in include and k not in exclude}
@@ -182,11 +188,11 @@ def view(
     return wrapper
 
 
-def view_validator(view_names: List[str], *validator_args, **validator_kwds):
+def view_validator(view_names: List[str], field_name: str, *validator_args, **validator_kwds):
     def wrapper(fn):
         fn._is_view_validator = True
         fn._view_validator_view_names = view_names
-        fn._view_validator_args = validator_args
+        fn._view_validator_args = (field_name,) + validator_args
         fn._view_validator_kwds = validator_kwds
         return fn
 
