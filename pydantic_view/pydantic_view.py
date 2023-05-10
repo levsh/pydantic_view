@@ -30,6 +30,8 @@ def view(
         optional_not_none = set()
     if fields is None:
         fields = {}
+    if recursive is None:
+        recursive = True
     if config is None:
         config = {}
 
@@ -125,10 +127,6 @@ def view(
             if field := view_cls.__fields__.get(field_name):
                 field.required = False
 
-        for field_name in optional_not_none:
-            if field := view_cls.__fields__.get(field_name):
-                field.allow_none = False
-
         if recursive is True:
 
             def update_type(tp):
@@ -154,6 +152,10 @@ def view(
 
             for field in view_cls.__fields__.values():
                 update_field_type(field)
+
+        for field_name in optional_not_none:
+            if field := view_cls.__fields__.get(field_name):
+                field.allow_none = False
 
         class ViewDesc:
             def __get__(self, obj, owner=None):
