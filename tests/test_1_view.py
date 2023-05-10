@@ -3,7 +3,7 @@ from typing import Any, ForwardRef, List
 import pytest
 from pydantic import BaseModel, BaseSettings, SecretStr, ValidationError, root_validator, validator
 
-from pydantic_view import view, view_root_validator, view_validator
+from pydantic_view import reapply_base_views, view, view_root_validator, view_validator
 
 
 def test_basic():
@@ -402,3 +402,21 @@ def test_base():
     assert not hasattr(Model.OutShowSecrets(secret="secret"), "i")
     assert Model.OutShowSecrets(secret="abc").secret == "abc"
     assert Model(i=0, secret="abc").OutShowSecrets().secret == "abc"
+
+
+def test_reapply_base_views():
+    @view("View", exclude={"y"})
+    class Parent(BaseModel):
+        x: int
+        y: int
+
+    class ChildNotReapplied(Parent):
+        z: int
+
+    assert "z" not in ChildNotReapplied.View.__fields__
+
+    @reapply_base_views
+    class ChildReapplied(Parent):
+        z: int
+
+    assert "z" in ChildReapplied.View.__fields__

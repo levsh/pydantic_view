@@ -35,6 +35,17 @@ def view(
     if config is None:
         config = {}
 
+    view_kwds = dict(
+        name=name,
+        include=include,
+        exclude=exclude,
+        optional=optional,
+        optional_not_none=optional_not_none,
+        fields=fields,
+        recursive=recursive,
+        config=config,
+    )
+
     def wrapper(
         cls,
         name=name,
@@ -127,6 +138,10 @@ def view(
             if field := view_cls.__fields__.get(field_name):
                 field.required = False
 
+        for field_name in optional_not_none:
+            if field := view_cls.__fields__.get(field_name):
+                field.allow_none = False
+
         if recursive is True:
 
             def update_type(tp):
@@ -189,6 +204,11 @@ def view(
 
         setattr(cls, name, ViewDesc())
 
+        if not hasattr(cls, "__pydantic_view_kwds__"):
+            setattr(cls, "__pydantic_view_kwds__", {})
+
+        cls.__pydantic_view_kwds__[name] = view_kwds
+
         return cls
 
     return wrapper
@@ -214,3 +234,9 @@ def view_root_validator(view_names: List[str], *validator_args, **validator_kwds
         return fn
 
     return wrapper
+
+
+def reapply_base_views(cls):
+    for view_kwds in getattr(cls, "__pydantic_view_kwds__", {}).values():
+        view(**view_kwds)(cls)
+    return cls
