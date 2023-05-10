@@ -6,7 +6,7 @@ from pydantic import BaseModel, BaseSettings, SecretStr, ValidationError, root_v
 from pydantic_view import view, view_root_validator, view_validator
 
 
-def test_base():
+def test_basic():
     @view("View")
     class Model(BaseModel):
         x: int
@@ -374,8 +374,8 @@ def test_settings():
         assert Model(x=0).ViewValidate()
 
 
-def test_base_view():
-    @view("OutShowSecrets", base_view="Out", include={"secret"}, fields={"secret": str})
+def test_base():
+    @view("OutShowSecrets", base=["Out"], include={"secret"}, fields={"secret": str})
     @view("Out")
     class Model(BaseModel):
         i: int

@@ -10,7 +10,7 @@ class CustomDict(dict):
 
 def view(
     name: str,
-    base_view: str = None,
+    base: List[str] = None,
     include: Set[str] = None,
     exclude: Set[str] = None,
     optional: Set[str] = None,
@@ -44,15 +44,16 @@ def view(
         recursive=recursive,
         config=config,
     ):
-        if base_view:
-            base = getattr(cls, base_view)
-        else:
-            base = cls
+        __base__ = cls
+        for view in base or []:
+            if hasattr(cls, view):
+                __base__ = getattr(cls, view)
+                break
 
         if include and exclude:
             raise ValueError("include and exclude cannot be used together")
 
-        include = include or set(base.__fields__.keys())
+        include = include or set(__base__.__fields__.keys())
 
         __fields__ = {}
 
@@ -60,12 +61,12 @@ def view(
             raise Exception("Field should only present in the one of optional, optional_not_none or fields")
 
         for field_name in optional | optional_not_none:
-            if (field := base.__fields__.get(field_name)) is None:
+            if (field := __base__.__fields__.get(field_name)) is None:
                 raise Exception(f"Model has not field '{field_name}'")
             __fields__[field_name] = (Optional[field.outer_type_], field.field_info)
 
         for field_name, value in fields.items():
-            if (field := base.__fields__.get(field_name)) is None:
+            if (field := __base__.__fields__.get(field_name)) is None:
                 raise Exception(f"Model has not field '{field_name}'")
             if isinstance(value, (tuple, list)):
                 __fields__[field_name] = value
@@ -97,7 +98,7 @@ def view(
         view_cls = create_model(
             view_cls_name,
             __module__=cls.__module__,
-            __base__=(base,),
+            __base__=(__base__,),
             __validators__=__validators__,
             __cls_kwargs__=__cls_kwargs__,
             **__fields__,
@@ -115,7 +116,7 @@ def view(
         setattr(view_cls, "__root_cls__", RootClsDesc())
 
         if config:
-            config_cls = type("Config", (base.Config,), config)
+            config_cls = type("Config", (__base__.Config,), config)
             view_cls = type(view_cls_name, (view_cls,), {"Config": config_cls})
 
         view_cls.__fields__ = {k: v for k, v in view_cls.__fields__.items() if k in include and k not in exclude}
