@@ -204,7 +204,9 @@ def view(
 
         setattr(cls, name, ViewDesc())
 
-        if not hasattr(cls, "__pydantic_view_kwds__"):
+        try:
+            object.__getattribute__(cls, "__pydantic_view_kwds__")
+        except AttributeError:
             setattr(cls, "__pydantic_view_kwds__", {})
 
         cls.__pydantic_view_kwds__[name] = view_kwds
