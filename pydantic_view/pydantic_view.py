@@ -132,8 +132,11 @@ def view(
             def update_type(tp):
                 if isinstance(tp, _GenericAlias):
                     tp.__args__ = tuple(update_type(arg) for arg in tp.__args__)
-                elif isinstance(tp, type) and issubclass(tp, BaseModel) and hasattr(tp, name):
-                    tp = getattr(tp, name)
+                elif isinstance(tp, type) and issubclass(tp, BaseModel):
+                    for _name in (name, *tp.__bases__):
+                        if hasattr(tp, name):
+                            tp = getattr(tp, name)
+                            break
                 return tp
 
             def update_field_type(field):

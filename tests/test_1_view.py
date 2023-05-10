@@ -160,13 +160,22 @@ def test_recursive():
         x: int
         y: int
 
+    @view("ViewEx", base=["View"], recursive=True)
     @view("View", recursive=True)
     class Model(BaseModel):
         x: int
         submodel: SubModel
 
     model = Model(x=0, submodel=SubModel(x=0, y=1))
+
     model_view = model.View()
+    assert model_view.x == 0
+    assert model_view.submodel
+    assert type(model_view.submodel) == SubModel.View
+    assert model_view.submodel.x == 0
+    assert not hasattr(model_view.submodel, "y")
+
+    model_view = model.ViewEx()
     assert model_view.x == 0
     assert model_view.submodel
     assert type(model_view.submodel) == SubModel.View
