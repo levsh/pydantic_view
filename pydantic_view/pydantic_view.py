@@ -37,12 +37,14 @@ def view(
 
     view_kwds = dict(
         name=name,
+        base=base,
         include=include,
         exclude=exclude,
         optional=optional,
         optional_not_none=optional_not_none,
         fields=fields,
         recursive=recursive,
+        extra=extra,
         config=config,
     )
 
