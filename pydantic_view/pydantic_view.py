@@ -92,7 +92,8 @@ def view(
 
         __validators__ = {}
 
-        for attr_name, attr in cls.__dict__.items():
+        for attr_name in dir(cls):
+            attr = getattr(cls, attr_name)
             if getattr(attr, "_is_view_validator", None) and name in attr._view_validator_view_names:
                 __validators__[attr_name] = validator(
                     *attr._view_validator_args,
@@ -206,9 +207,7 @@ def view(
 
         setattr(cls, name, ViewDesc())
 
-        try:
-            object.__getattribute__(cls, "__pydantic_view_kwds__")
-        except AttributeError:
+        if "__pydantic_view_kwds__" not in cls.__dict__:
             setattr(cls, "__pydantic_view_kwds__", {})
 
         cls.__pydantic_view_kwds__[name] = view_kwds
