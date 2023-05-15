@@ -120,7 +120,7 @@ def view(
             **__fields__,
         )
 
-        class RootClsDesc:
+        class ViewRootClsDesc:
             def __get__(self, obj, owner=None):
                 return cls
 
@@ -129,7 +129,7 @@ def view(
                 return name
 
         setattr(view_cls, "__view_name__", ViewNameClsDesc())
-        setattr(view_cls, "__root_cls__", RootClsDesc())
+        setattr(view_cls, "__view_root_cls__", ViewRootClsDesc())
 
         if config:
             config_cls = type("Config", (__base__.Config,), config)
