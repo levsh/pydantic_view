@@ -133,7 +133,7 @@ def view(
 
         if config:
             config_cls = type("Config", (__base__.Config,), config)
-            view_cls = type(view_cls_name, (view_cls,), {"Config": config_cls})
+            view_cls = type(view_cls_name, (view_cls,), {"__module__": cls.__module__, "Config": config_cls})
 
         view_cls.__fields__ = {k: v for k, v in view_cls.__fields__.items() if k in include and k not in exclude}
 

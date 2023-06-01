@@ -404,6 +404,27 @@ def test_base():
     assert Model(i=0, secret="abc").OutShowSecrets().secret == "abc"
 
 
+def test_recursive_list_with_base():
+    @view("View", include={"x"})
+    class SubModel(BaseModel):
+        x: int
+        y: int
+
+    @view("ViewChild", base=["View"], include={"submodels"})
+    @view("View", recursive=True)
+    class Model(BaseModel):
+        x: int
+        submodels: List[SubModel]
+
+    model = Model(x=0, submodels=[SubModel(x=0, y=1)])
+    model_view = model.ViewChild()
+    assert not hasattr(model_view, "x")
+    assert model_view.submodels
+    assert type(model_view.submodels[0]) == SubModel.View
+    assert model_view.submodels[0].x == 0
+    assert not hasattr(model_view.submodels[0], "y")
+
+
 def test_reapply_base_views():
     @view("View", exclude={"y"})
     class Parent(BaseModel):
