@@ -18,7 +18,8 @@ classifiers = [
 ]
 
 [tool.poetry.dependencies]
-pydantic = "^1.10"
+# pydantic = "^1.10"
+pydantic = "*"
 python = "^3.8"
 
 

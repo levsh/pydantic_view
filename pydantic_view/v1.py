@@ -4,10 +4,6 @@ from pydantic import BaseModel, Extra, create_model, root_validator, validator
 from pydantic.fields import FieldInfo
 
 
-class CustomDict(dict):
-    pass
-
-
 def view(
     name: str,
     base: List[str] = None,
@@ -181,27 +177,14 @@ def view(
         class ViewDesc:
             def __get__(self, obj, owner=None):
                 if obj:
-                    if not hasattr(obj.__dict__, f"_{view_cls_name}"):
 
-                        def __init__(self):
-                            kwds = {k: v for k, v in obj.dict().items() if k in include and k not in exclude}
-                            super(cls, self).__init__(**kwds)
+                    def view_factory():
+                        return view_cls(**{k: v for k, v in obj.dict().items() if k in include and k not in exclude})
 
-                        object.__setattr__(obj, "__dict__", CustomDict(**obj.__dict__))
-                        setattr(
-                            obj.__dict__,
-                            f"_{view_cls_name}",
-                            type(
-                                view_cls_name,
-                                (view_cls,),
-                                {
-                                    "__module__": cls.__module__,
-                                    "__init__": __init__,
-                                },
-                            ),
-                        )
+                    view_factory.__view_name__ = name
+                    view_factory.__view_root_cls__ = cls
 
-                    return getattr(obj.__dict__, f"_{view_cls_name}")
+                    return view_factory
 
                 return view_cls
 
