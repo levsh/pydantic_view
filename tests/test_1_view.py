@@ -441,6 +441,9 @@ def test_reapply_base_views():
         z: int
 
     assert "z" in ChildReapplied.View.__fields__
+    assert issubclass(ChildReapplied.View, Parent)
+    assert issubclass(ChildReapplied.View, Parent.View)
+    assert not issubclass(Parent.View, ChildReapplied.View)
 
 
 def test_root():

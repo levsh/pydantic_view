@@ -108,7 +108,25 @@ def view(
 
         view_cls_name = f"{cls.__name__}{name}"
 
-        __cls_kwargs__ = {}
+        if base is None:
+            metaclass_bases = []
+            for item in set([__base__, *__base__.__bases__]):
+                if issubclass(item, BaseModel):
+                    item = item.__class__
+                if item not in metaclass_bases:
+                    metaclass_bases.append(item)
+
+            class Metaclass(*metaclass_bases):
+                def __subclasscheck__(self, subclass):
+                    if getattr(subclass, "__view_name__", None) == name:
+                        return cls.__subclasscheck__(subclass.__view_root_cls__)
+                    return super().__subclasscheck__(subclass)
+
+            __cls_kwargs__ = {"metaclass": Metaclass}
+
+        else:
+            __cls_kwargs__ = {}
+
         if extra:
             __cls_kwargs__["extra"] = extra
 
