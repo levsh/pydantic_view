@@ -11,6 +11,7 @@ class CustomDict(dict):
 def view(
     name: str,
     base: List[str] = None,
+    root: str = None,
     include: Set[str] = None,
     exclude: Set[str] = None,
     optional: Set[str] = None,
@@ -205,7 +206,12 @@ def view(
 
                 return view_cls
 
-        setattr(cls, name, ViewDesc())
+        o = cls
+        if root:
+            for item in root.split("."):
+                o = getattr(o, item)
+
+        setattr(o, name, ViewDesc())
 
         if "__pydantic_view_kwds__" not in cls.__dict__:
             setattr(cls, "__pydantic_view_kwds__", {})

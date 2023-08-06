@@ -441,3 +441,19 @@ def test_reapply_base_views():
         z: int
 
     assert "z" in ChildReapplied.View.__fields__
+
+
+def test_root():
+    @view("ViewC", root="ViewA.ViewB")
+    @view("ViewB", root="ViewA")
+    @view("ViewA", include={"i"})
+    class Model(BaseModel):
+        i: int
+        j: int
+
+    assert Model.ViewA
+    assert not hasattr(Model, "ViewB")
+    assert not hasattr(Model, "ViewC")
+    assert Model.ViewA.ViewB
+    assert not hasattr(Model.ViewA, "ViewC")
+    assert Model.ViewA.ViewB.ViewC
