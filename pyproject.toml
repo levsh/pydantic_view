@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "pydantic-view"
-version = "0.2.3"
+version = "0.2.4"
 description = "View decorator to create the child pydantic models from the root model."
 authors = ["Roman Koshel <roma.koshel@gmail.com>"]
 license = "MIT"
