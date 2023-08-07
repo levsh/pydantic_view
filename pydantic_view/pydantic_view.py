@@ -118,7 +118,7 @@ def view(
 
             class Metaclass(*metaclass_bases):
                 def __subclasscheck__(self, subclass):
-                    if getattr(subclass, "__view_name__", None) == name:
+                    if getattr(subclass, "__view_name__", None) == self.__view_name__:
                         return cls.__subclasscheck__(subclass.__view_root_cls__)
                     return super().__subclasscheck__(subclass)
 
