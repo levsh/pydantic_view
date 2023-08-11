@@ -206,7 +206,7 @@ def test_str():
     class Model(BaseModel):
         x: int = None
 
-    assert f"{Model.View}" == "<class 'tests.v2.test_1.ModelView'>"
+    assert f"{Model.View}" == "<class 'tests.v2.test_1_view.ModelView'>"
     model = Model()
     assert f"{model}" == "x=None"
 

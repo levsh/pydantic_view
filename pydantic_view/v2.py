@@ -1,6 +1,6 @@
 from typing import Dict, List, Literal, Optional, Set, Tuple, Type, Union, _GenericAlias
 
-from pydantic import BaseModel, Extra, create_model, field_validator, model_validator
+from pydantic import BaseModel, ConfigDict, Extra, create_model, field_validator, model_validator
 from pydantic.errors import PydanticUserError
 from pydantic.fields import FieldInfo
 
@@ -80,6 +80,9 @@ def view(
             include = include or set(__base__.model_fields.keys())
 
             __fields__ = {}
+
+            if config:
+                __fields__["model_config"] = ConfigDict(**config)
 
             if (
                 (optional & optional_not_none)
@@ -167,9 +170,9 @@ def view(
             setattr(view_cls, "__view_name__", ViewNameClsDesc())
             setattr(view_cls, "__view_root_cls__", ViewRootClsDesc())
 
-            if config:
-                config_cls = type("Config", (__base__.Config,), config)
-                view_cls = type(view_cls_name, (view_cls,), {"__module__": cls.__module__, "Config": config_cls})
+            # if config:
+            #     config_cls = type("Config", (__base__.Config,), config)
+            #     view_cls = type(view_cls_name, (view_cls,), {"__module__": cls.__module__, "Config": config_cls})
 
             view_cls.model_fields = {
                 k: v for k, v in view_cls.model_fields.items() if k in include and k not in exclude
