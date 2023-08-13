@@ -1,4 +1,5 @@
-from typing import Dict, List, Literal, Optional, Set, Tuple, Type, Union, _GenericAlias
+from copy import deepcopy
+from typing import Dict, List, Literal, Optional, Set, Tuple, Type, Union, _GenericAlias, _UnionGenericAlias
 
 from pydantic import BaseModel, ConfigDict, Extra, create_model, field_validator, model_validator
 from pydantic.errors import PydanticUserError
@@ -13,7 +14,7 @@ def view(
     optional: Set[str] = None,
     optional_not_none: Set[str] = None,
     fields: Dict[str, Union[Type, FieldInfo, Tuple[Type, FieldInfo]]] = None,
-    recursive: bool = None,
+    recursive: bool = True,
     extra: Extra = None,
     config=None,
 ):
@@ -27,8 +28,6 @@ def view(
         optional_not_none = set()
     if fields is None:
         fields = {}
-    if recursive is None:
-        recursive = True
     if config is None:
         config = {}
 
@@ -91,15 +90,8 @@ def view(
             ):
                 raise Exception("Field should only present in the one of optional, optional_not_none or fields")
 
-            for field_name, value in fields.items():
-                if (field_info := __base__.model_fields.get(field_name)) is None:
-                    raise Exception(f"Model has not field '{field_name}'")
-                if isinstance(value, (tuple, list)):  # (type, value|FieldInfo)
-                    __fields__[field_name] = value
-                elif isinstance(value, FieldInfo):
-                    __fields__[field_name] = (field_info.annotation, value)
-                else:
-                    __fields__[field_name] = (value, field_info)
+            if extra_fields := fields.keys() - __base__.model_fields.keys():
+                raise Exception(f"Model has not fields '{list(extra_fields)}'")
 
             def update_type(tp):
                 if isinstance(tp, _GenericAlias):
@@ -112,36 +104,53 @@ def view(
                 return tp
 
             for field_name, field_info in __base__.model_fields.items():
-                if field_name in __fields__:
-                    annotation, field_info = __fields__[field_name]
+                if field_name in fields:
+                    value = fields[field_name]
+                    if isinstance(value, FieldInfo):
+                        if not value.annotation:
+                            if recursive is True:
+                                value.annotation = update_type(deepcopy(field_info.annotation))
+                            else:
+                                value.annotation = field_info.annotation
+                        __fields__[field_name] = (value.annotation, value)
+                    elif isinstance(value, (tuple, list)):
+                        __fields__[field_name] = FieldInfo(annotation=value[0], default=value[1])
+                    else:
+                        __fields__[field_name] = (value, FieldInfo(annotation=value))
                 else:
-                    annotation = field_info.annotation
-                if recursive is True:
-                    annotation = update_type(annotation)
-                if field_name in optional:
-                    __fields__[field_name] = (Optional[annotation], field_info)
-                    __fields__[field_name][1].default = None
-                elif field_name in optional_not_none:
-                    __fields__[field_name] = (annotation, field_info)
-                    __fields__[field_name][1].default = None
-                else:
-                    __fields__[field_name] = (annotation, field_info)
+                    field_info = deepcopy(field_info)
+                    if recursive is True:
+                        field_info.annotation = update_type(field_info.annotation)
+                    if field_name in optional:
+                        field_info.annotation = Optional[field_info.annotation]
+                        field_info.default = None
+                    elif field_name in optional_not_none:
+                        field_info.default = None
+                        if isinstance(field_info.annotation, _UnionGenericAlias):
+                            params = [x for x in field_info.annotation.__args__ if not issubclass(x, type(None))]
+                            field_info.annotation = Union[*params]  # noqa
+                    __fields__[field_name] = (field_info.annotation, field_info)
 
             __validators__ = {}
 
-            for attr_name in dir(cls):
-                if attr_name.startswith("__"):
-                    continue
-                attr = getattr(cls, attr_name)
-                if getattr(attr, "_is_view_validator", None) and name in attr._view_validator_view_names:
+            for attr_name, attr in cls.__dict__.items():
+                # fmt: off
+                if (
+                    getattr(attr, "__pydantic_view_is_field_validator__", None)
+                    and name in attr.__pydantic_view_validator_view_names__
+                ):  # fmt: on
                     __validators__[attr_name] = field_validator(
-                        *attr._view_validator_args,
-                        **attr._view_validator_kwds,
+                        *attr.__pydantic_view_validator_args__,
+                        **attr.__pydantic_view_validator_kwds__,
                     )(attr)
-                elif getattr(attr, "_is_view_model_validator", None) and name in attr._view_model_validator_view_names:
+                # fmt: off
+                elif (
+                    getattr(attr, "__pydantic_view_is_model_validator__", None)
+                    and name in attr.__pydantic_view_model_validator_view_names__
+                ):  # fmt: on
                     __validators__[attr_name] = model_validator(
-                        *attr._view_model_validator_args,
-                        **attr._view_model_validator_kwds,
+                        *attr.__pydantic_view_model_validator_args__,
+                        **attr.__pydantic_view_model_validator_kwds__,
                     )(attr)
 
             view_cls_name = f"{cls.__name__}{name}"
@@ -167,12 +176,8 @@ def view(
                 def __get__(self, obj, owner=None):
                     return name
 
-            setattr(view_cls, "__view_name__", ViewNameClsDesc())
-            setattr(view_cls, "__view_root_cls__", ViewRootClsDesc())
-
-            # if config:
-            #     config_cls = type("Config", (__base__.Config,), config)
-            #     view_cls = type(view_cls_name, (view_cls,), {"__module__": cls.__module__, "Config": config_cls})
+            setattr(view_cls, "__pydantic_view_name__", ViewNameClsDesc())
+            setattr(view_cls, "__pydantic_view_root_cls__", ViewRootClsDesc())
 
             view_cls.model_fields = {
                 k: v for k, v in view_cls.model_fields.items() if k in include and k not in exclude
@@ -209,8 +214,8 @@ def view(
                                 }
                             )
 
-                        view_factory.__view_name__ = name
-                        view_factory.__view_root_cls__ = cls
+                        view_factory.__pydantic_view_name__ = name
+                        view_factory.__pydantic_view_root_cls__ = cls
 
                         return view_factory
 
@@ -242,10 +247,10 @@ def view(
             if "is not fully defined; you should define" not in f"{e}":
                 raise e
 
-            if rebuild_views := getattr(cls, "views_rebild", None):
+            if views_rebuild := getattr(cls, "views_rebuild", None):
 
-                def rebuild_views():
-                    rebuild_views()
+                def rebuild():
+                    views_rebuild()
                     build_view(
                         cls=cls,
                         name=name,
@@ -258,6 +263,8 @@ def view(
                         config=config,
                     )
 
+                setattr(cls, "views_rebuild", rebuild)
+
             else:
                 setattr(cls, "views_rebuild", build_view)
 
@@ -268,10 +275,10 @@ def view(
 
 def view_field_validator(view_names: List[str], field_name: str, *validator_args, **validator_kwds):
     def wrapper(fn):
-        fn._is_view_validator = True
-        fn._view_validator_view_names = view_names
-        fn._view_validator_args = (field_name,) + validator_args
-        fn._view_validator_kwds = validator_kwds
+        fn.__pydantic_view_is_field_validator__ = True
+        fn.__pydantic_view_validator_view_names__ = view_names
+        fn.__pydantic_view_validator_args__ = (field_name,) + validator_args
+        fn.__pydantic_view_validator_kwds__ = validator_kwds
         return fn
 
     return wrapper
@@ -279,10 +286,10 @@ def view_field_validator(view_names: List[str], field_name: str, *validator_args
 
 def view_model_validator(view_names: List[str], *, mode: Literal["wrap", "before", "after"]):
     def wrapper(fn):
-        fn._is_view_model_validator = True
-        fn._view_model_validator_view_names = view_names
-        fn._view_model_validator_args = ()
-        fn._view_model_validator_kwds = {"mode": mode}
+        fn.__pydantic_view_is_model_validator__ = True
+        fn.__pydantic_view_model_validator_view_names__ = view_names
+        fn.__pydantic_view_model_validator_args__ = ()
+        fn.__pydantic_view_model_validator_kwds__ = {"mode": mode}
         return fn
 
     return wrapper

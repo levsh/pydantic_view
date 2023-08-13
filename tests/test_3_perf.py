@@ -7,20 +7,25 @@ from pydantic_view import view
 
 def test_perf():
     @view("View")
+    class SubModel(BaseModel):
+        x: int = None
+
+    @view("View")
     class Model(BaseModel):
         i: int
         f: float
         s: str
+        sub: SubModel
 
     print()
 
-    for _ in range(5):
+    for _ in range(3):
         t0 = monotonic()
-        [Model(i=1, f=1.1, s="a") for _ in range(20**3)]
+        [Model(i=1, f=1.1, s="a", sub=SubModel()) for _ in range(25**3)]
         t1 = monotonic() - t0
         print(t1)
 
-        models = [Model(i=1, f=1.1, s="a") for _ in range(20**3)]
+        models = [Model(i=1, f=1.1, s="a", sub=SubModel()) for _ in range(25**3)]
         t0 = monotonic()
         [model.View() for model in models]
         t2 = monotonic() - t0
