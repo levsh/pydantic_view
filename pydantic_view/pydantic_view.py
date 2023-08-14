@@ -1,9 +1,13 @@
 from copy import deepcopy
-from typing import Dict, List, Literal, Optional, Set, Tuple, Type, Union, _GenericAlias, _UnionGenericAlias
+from typing import Dict, List, Literal, Optional, Set, Tuple, Type, Union, _GenericAlias, get_origin
 
 from pydantic import BaseModel, ConfigDict, Extra, create_model, field_validator, model_validator
 from pydantic.errors import PydanticUserError
 from pydantic.fields import FieldInfo
+
+
+class SchemaNotFoundError(Exception):
+    pass
 
 
 def view(
@@ -17,6 +21,7 @@ def view(
     recursive: bool = True,
     extra: Extra = None,
     config=None,
+    postpone: bool = False,
 ):
     if include is None:
         include = set()
@@ -114,7 +119,12 @@ def view(
                                 value.annotation = field_info.annotation
                         __fields__[field_name] = (value.annotation, value)
                     elif isinstance(value, (tuple, list)):
-                        __fields__[field_name] = FieldInfo(annotation=value[0], default=value[1])
+                        annotation = value[0]
+                        if isinstance(value[1], FieldInfo):
+                            value[1].annotation = annotation
+                            __fields__[field_name] = (annotation, value[1])
+                        else:
+                            __fields__[field_name] = (annotation, FieldInfo(annotation=annotation, default=value[1]))
                     else:
                         __fields__[field_name] = (value, FieldInfo(annotation=value))
                 else:
@@ -126,9 +136,9 @@ def view(
                         field_info.default = None
                     elif field_name in optional_not_none:
                         field_info.default = None
-                        if isinstance(field_info.annotation, _UnionGenericAlias):
-                            params = [x for x in field_info.annotation.__args__ if not issubclass(x, type(None))]
-                            field_info.annotation = Union[*params]  # noqa
+                        if get_origin(field_info.annotation) == Union:
+                            params = tuple(x for x in field_info.annotation.__args__ if not issubclass(x, type(None)))
+                            field_info.annotation = Union[params]  # noqa
                     __fields__[field_name] = (field_info.annotation, field_info)
 
             __validators__ = {}
@@ -183,21 +193,29 @@ def view(
                 k: v for k, v in view_cls.model_fields.items() if k in include and k not in exclude
             }
 
-            definition = next(
-                filter(
-                    lambda d: d["type"] == "model" and d["cls"] == view_cls,
-                    view_cls.__pydantic_core_schema__["definitions"],
-                )
-            )
+            def find_model_schema(definitions):
+                for definition in definitions:
+                    if definition["type"] == "model" and definition["cls"] == view_cls:
+                        return definition
+                    schema = definition
+                    while schema := schema.get("schema"):
+                        if schema["type"] == "model" and schema["cls"] == view_cls:
+                            return schema
 
-            def find_schema(schema):
+            model_schema = find_model_schema(view_cls.__pydantic_core_schema__["definitions"])
+            if model_schema is None:
+                raise SchemaNotFoundError(name)
+
+            def find_fields_schema(schema):
                 if schema["type"] != "model-fields":
-                    return find_schema(schema["schema"])
+                    return find_fields_schema(schema["schema"])
                 return schema
 
-            schema = find_schema(definition["schema"])
+            fields_schema = find_fields_schema(model_schema["schema"])
 
-            schema["fields"] = {k: v for k, v in schema["fields"].items() if k in include and k not in exclude}
+            fields_schema["fields"] = {
+                k: v for k, v in fields_schema["fields"].items() if k in include and k not in exclude
+            }
 
             view_cls.model_rebuild(force=True)
 
@@ -230,23 +248,28 @@ def view(
 
             return cls
 
-        try:
-            cls.__pydantic_core_schema__
-            return build_view(
-                cls=cls,
-                name=name,
-                include=include,
-                exclude=exclude,
-                optional=optional,
-                optional_not_none=optional_not_none,
-                fields=fields,
-                recursive=recursive,
-                config=config,
-            )
-        except PydanticUserError as e:
-            if "is not fully defined; you should define" not in f"{e}":
-                raise e
+        error = False
 
+        if not postpone:
+            try:
+                cls.__pydantic_core_schema__
+                return build_view(
+                    cls=cls,
+                    name=name,
+                    include=include,
+                    exclude=exclude,
+                    optional=optional,
+                    optional_not_none=optional_not_none,
+                    fields=fields,
+                    recursive=recursive,
+                    config=config,
+                )
+            except (PydanticUserError, SchemaNotFoundError) as e:
+                if isinstance(e, PydanticUserError) and "is not fully defined; you should define" not in f"{e}":
+                    raise e
+                error = True
+
+        if error or postpone:
             if views_rebuild := getattr(cls, "views_rebuild", None):
 
                 def rebuild():
