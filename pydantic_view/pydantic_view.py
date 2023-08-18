@@ -199,7 +199,11 @@ def view(
                     if not hasattr(obj.__dict__, f"_{view_cls_name}"):
 
                         def __init__(self):
-                            kwds = {k: v for k, v in obj.dict().items() if k in include and k not in exclude}
+                            kwds = {
+                                k: v
+                                for k, v in obj.dict(exclude_unset=True).items()
+                                if k in include and k not in exclude
+                            }
                             super(cls, self).__init__(**kwds)
 
                         object.__setattr__(obj, "__dict__", CustomDict(**obj.__dict__))
