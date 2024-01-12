@@ -1,4 +1,4 @@
-from typing import List, Optional
+from typing import Optional
 
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
@@ -7,12 +7,6 @@ from pydantic import BaseModel, ConfigDict, Field
 from pydantic_view import view, view_field_validator
 
 
-@view("Out", exclude={"secret"})
-@view("Create")
-@view("Update")
-@view("UpdateMany")
-@view("Patch", optional_not_none={"public", "secret"})
-@view("PatchMany", optional={"public", "secret"})
 class UserSettings(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -20,12 +14,27 @@ class UserSettings(BaseModel):
     secret: Optional[str] = None
 
 
-@view("Out", exclude={"password"})
-@view("Create", exclude=["id"], fields={"settings": Field(default_factory=UserSettings)})
-@view("Update", exclude={"id"})
-@view("UpdateMany")
-@view("Patch", exclude={"id"}, optional_not_none={"username", "password", "settings"})
-@view("PatchMany", optional_not_none={"username", "password", "settings"})
+@view("Out", exclude={"secret"})
+class UserSettingsOut(UserSettings):
+    pass
+
+
+@view("Create")
+class UserSettingsCreate(UserSettings):
+    pass
+
+
+@view("Update")
+class UserSettingsUpdate(UserSettings):
+    pass
+
+
+@view("Patch")
+class UserSettingsPatch(UserSettings):
+    public: str = None
+    secret: str = None
+
+
 class User(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -34,12 +43,34 @@ class User(BaseModel):
     password: str = Field(default_factory=lambda: "password")
     settings: UserSettings
 
-    @view_field_validator(["Create", "Update", "UpdateMany", "Patch", "PatchMany"], "username")
+    @view_field_validator({"Create", "Update", "Patch"}, "username")
     @classmethod
     def validate_username(cls, v):
         if len(v) < 3:
             raise ValueError
         return v
+
+
+@view("Out", exclude={"password"})
+class UserOut(User):
+    pass
+
+
+@view("Create", exclude={"id"})
+class UserCreate(User):
+    settings: UserSettings = Field(default_factory=UserSettings)
+
+
+@view("Update", exclude={"id"})
+class UserUpdate(User):
+    pass
+
+
+@view("Patch", exclude={"id"})
+class UserPatch(User):
+    username: str = None
+    password: str = None
+    settings: UserSettings = None
 
 
 app = FastAPI()
@@ -65,24 +96,10 @@ async def put(user_id: int, user: User.Update) -> User.Out:
     return db[user_id]
 
 
-@app.put("/users", response_model=List[User.Out])
-async def put_many(users: List[User.UpdateMany]) -> List[User.Out]:
-    for user in users:
-        db[user.id] = user
-    return users
-
-
 @app.patch("/users/{user_id}", response_model=User.Out)
 async def patch(user_id: int, user: User.Patch) -> User.Out:
     db[user_id] = User(**{**db[user_id].model_dump(), **user.model_dump(exclude_unset=True)})
     return db[user_id]
-
-
-@app.patch("/users", response_model=List[User.Out])
-async def patch_many(users: List[User.PatchMany]) -> List[User.Out]:
-    for user in users:
-        db[user.id] = User(**{**db[user.id].model_dump(), **user.model_dump(exclude_unset=True)})
-    return [db[user.id] for user in users]
 
 
 def test_fastapi():

@@ -10,22 +10,33 @@ pip install pydantic_view
 ### Usage
 
 ```python
-In [1]: from uuid import UUID, uuid4
-   ...: 
-   ...: from pydantic import BaseModel, Field
+In [1]: from pydantic import BaseModel, Field
    ...: from pydantic_view import view
    ...: 
    ...: 
-   ...: @view("Create", exclude={"id"})
-   ...: @view("Update")
-   ...: @view("Patch", optional={"username", "password", "address"})
-   ...: @view("Out", exclude={"password"})
    ...: class User(BaseModel):
    ...:     id: int
    ...:     username: str
    ...:     password: str
    ...:     address: str
    ...: 
+   ...: @view("Create", exclude={"id"})
+   ...: class UserCreate(User):
+   ...:     pass
+   ...:
+   ...: @view("Update")
+   ...: class UserUpdate(User):
+   ...:     pass
+   ...:
+   ...: @view("Patch")
+   ...: class UserPatch(User):
+   ...:     username: str = None
+   ...:     password: str = None
+   ...:     address: str = None
+   ...:
+   ...: @view("Out", exclude={"password"})
+   ...: class UserOut(User):
+   ...:     pass
 
 In [2]: user = User(id=0, username="human", password="iamaman", address="Earth")
    ...: user.Out()
@@ -45,7 +56,7 @@ Out[4]: UserPatch(id=0, username=None, password=None, address='Mars')
 ### FastAPI example
 
 ```python
-from typing import List, Optional
+from typing import Optional
 
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
@@ -53,10 +64,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from pydantic_view import view, view_field_validator
 
-@view("Out", exclude={"secret"})
-@view("Create")
-@view("Update")
-@view("Patch", optional_not_none={"public", "secret"})
+
 class UserSettings(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -64,10 +72,27 @@ class UserSettings(BaseModel):
     secret: Optional[str] = None
 
 
-@view("Out", exclude={"password"})
-@view("Create", exclude=["id"], fields={"settings": Field(default_factory=UserSettings)})
-@view("Update", exclude={"id"})
-@view("Patch", exclude={"id"}, optional_not_none={"username", "password", "settings"})
+@view("Out", exclude={"secret"})
+class UserSettingsOut(UserSettings):
+    pass
+
+
+@view("Create")
+class UserSettingsCreate(UserSettings):
+    pass
+
+
+@view("Update")
+class UserSettingsUpdate(UserSettings):
+    pass
+
+
+@view("Patch")
+class UserSettingsPatch(UserSettings):
+    public: str = None
+    secret: str = None
+
+
 class User(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -76,7 +101,7 @@ class User(BaseModel):
     password: str = Field(default_factory=lambda: "password")
     settings: UserSettings
 
-    @view_field_validator(["Create", "Update", "Patch"], "username")
+    @view_field_validator({"Create", "Update", "Patch"}, "username")
     @classmethod
     def validate_username(cls, v):
         if len(v) < 3:
@@ -84,7 +109,30 @@ class User(BaseModel):
         return v
 
 
+@view("Out", exclude={"password"})
+class UserOut(User):
+    pass
+
+
+@view("Create", exclude={"id"})
+class UserCreate(User):
+    settings: UserSettings = Field(default_factory=UserSettings)
+
+
+@view("Update", exclude={"id"})
+class UserUpdate(User):
+    pass
+
+
+@view("Patch", exclude={"id"})
+class UserPatch(User):
+    username: str = None
+    password: str = None
+    settings: UserSettings = None
+
+
 app = FastAPI()
+
 db = {}
 
 

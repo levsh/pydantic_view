@@ -1,186 +1,148 @@
-from copy import deepcopy
-from typing import Dict, List, Literal, Optional, Set, Tuple, Type, Union, _GenericAlias, get_origin
+from copy import copy
 
-from pydantic import BaseModel, ConfigDict, Extra, create_model, field_validator, model_validator
+from pydantic import BaseModel, create_model, field_validator, model_validator
+from pydantic._internal._decorators import Decorator
 from pydantic.errors import PydanticUserError
-from pydantic.fields import FieldInfo
-
-
-class SchemaNotFoundError(Exception):
-    pass
 
 
 def view(
     name: str,
-    base: List[str] = None,
-    include: Set[str] = None,
-    exclude: Set[str] = None,
-    optional: Set[str] = None,
-    optional_not_none: Set[str] = None,
-    fields: Dict[str, Union[Type, FieldInfo, Tuple[Type, FieldInfo]]] = None,
+    force: bool = False,
+    attach: bool = True,
+    include: set[str] | None = None,
+    exclude: set[str] | None = None,
     recursive: bool = True,
-    extra: Extra = None,
-    config=None,
-    postpone: bool = False,
 ):
-    if include is None:
-        include = set()
-    if exclude is None:
-        exclude = set()
-    if optional is None:
-        optional = set()
-    if optional_not_none is None:
-        optional_not_none = set()
-    if fields is None:
-        fields = {}
-    if config is None:
-        config = {}
+    """
+    Decorator to create a Pydantic model view.
 
-    view_kwds = dict(
-        name=name,
-        base=base,
-        include=include,
-        exclude=exclude,
-        optional=optional,
-        optional_not_none=optional_not_none,
-        fields=fields,
-        recursive=recursive,
-        extra=extra,
-        config=config,
-    )
+    Args:
+      name: view name.
+      force: force recreate if view with same name already exists.
+      attach: attach or not view to model as class attribute.
+      include: set of field names to include from model.
+      exclude: set of field names to exclude from model.
+      recursive: ...
+    """
+
+    if name is not None and not isinstance(name, str):
+        raise Exception("expect view name")
+
+    if (include or set()) & (exclude or set()):
+        raise ValueError("same fields in include and exclude are not allowed")
 
     def wrapper(
-        cls,
+        view_cls,
         name=name,
+        attach=attach,
         include=include,
         exclude=exclude,
-        optional=optional,
-        optional_not_none=optional_not_none,
-        fields=fields,
         recursive=recursive,
-        config=config,
     ):
-        def build_view(
-            cls=cls,
-            name=name,
-            include=include,
-            exclude=exclude,
-            optional=optional,
-            optional_not_none=optional_not_none,
-            fields=fields,
-            recursive=recursive,
-            config=config,
-        ):
-            __base__ = cls
+        if hasattr(view_cls, "__pydantic_view_root_cls__"):
+            root_cls = view_cls.__pydantic_view_root_cls__
+        else:
+            root_cls = view_cls.__base__
 
-            for view in base or []:
-                if hasattr(cls, view):
-                    __base__ = getattr(cls, view)
-                    break
+        if root_cls == BaseModel:
+            raise Exception("invalid model for view")
+        if not issubclass(view_cls, root_cls):
+            raise Exception("view must inherit from the model")
+        if not force and name in root_cls.__dict__:
+            raise Exception("view with some name already exists")
+        if set(view_cls.__dict__) & (exclude or set()):
+            raise ValueError("view model fields conflict with exclude parameter")
 
-            if include and exclude:
-                raise ValueError("include and exclude cannot be used together")
+        view_cls.__pydantic_view_params__ = {
+            "name": name,
+            "attach": attach,
+            "include": include,
+            "exclude": exclude,
+            "recursive": recursive,
+        }
 
-            include = include or set(__base__.model_fields.keys())
+        def build_view(root_cls, view_cls):
+            base_view_params = getattr(view_cls.__mro__[1], "__pydantic_view_params__", {})
+            view_params = view_cls.__pydantic_view_params__
 
-            __fields__ = {}
+            name = view_params["name"]
 
-            if config:
-                __fields__["model_config"] = ConfigDict(**config)
+            include = view_params["include"]
+            if include is None:
+                include = set(root_cls.model_fields.keys())
+            if base_view_params.get("include") is not None:
+                include &= base_view_params["include"]
 
-            if (
-                (optional & optional_not_none)
-                | (optional & set(fields.keys()))
-                | (optional_not_none & set(fields.keys()))
-            ):
-                raise Exception("Field should only present in the one of optional, optional_not_none or fields")
-
-            if extra_fields := fields.keys() - __base__.model_fields.keys():
-                raise Exception(f"Model has not fields '{list(extra_fields)}'")
+            exclude = view_params["exclude"]
+            if exclude is None:
+                exclude = set()
+            if base_view_params.get("exclude") is not None:
+                exclude |= base_view_params["exclude"]
 
             def update_type(tp):
-                if isinstance(tp, _GenericAlias):
-                    tp.__args__ = tuple(update_type(arg) for arg in tp.__args__)
+                if hasattr(tp, "__origin__"):
+                    return tp.__class__(
+                        update_type(tp.__origin__),
+                        tp.__metadata__
+                        if hasattr(tp, "__metadata__")
+                        else tuple(update_type(arg) for arg in tp.__args__),
+                    )
                 elif isinstance(tp, type) and issubclass(tp, BaseModel):
-                    for _name in (name, *(base or [])):
-                        if hasattr(tp, _name):
-                            tp = getattr(tp, _name)
-                            break
+                    if hasattr(tp, name):
+                        return getattr(tp, name)
                 return tp
 
-            for field_name, field_info in __base__.model_fields.items():
-                if field_name in fields:
-                    value = fields[field_name]
-                    if isinstance(value, FieldInfo):
-                        if not value.annotation:
-                            if recursive is True:
-                                value.annotation = update_type(deepcopy(field_info.annotation))
-                            else:
-                                value.annotation = field_info.annotation
-                        __fields__[field_name] = (value.annotation, value)
-                    elif isinstance(value, (tuple, list)):
-                        annotation = value[0]
-                        if isinstance(value[1], FieldInfo):
-                            value[1].annotation = annotation
-                            __fields__[field_name] = (annotation, value[1])
-                        else:
-                            __fields__[field_name] = (annotation, FieldInfo(annotation=annotation, default=value[1]))
-                    else:
-                        __fields__[field_name] = (value, FieldInfo(annotation=value))
-                else:
-                    field_info = deepcopy(field_info)
-                    if recursive is True:
-                        field_info.annotation = update_type(field_info.annotation)
-                    if field_name in optional:
-                        field_info.annotation = Optional[field_info.annotation]
-                        field_info.default = None
-                    elif field_name in optional_not_none:
-                        field_info.default = None
-                        if get_origin(field_info.annotation) == Union:
-                            params = tuple(x for x in field_info.annotation.__args__ if not issubclass(x, type(None)))
-                            field_info.annotation = Union[params]  # noqa
-                    __fields__[field_name] = (field_info.annotation, field_info)
+            if recursive is True:
+                fields = {k: copy(v) for k, v in view_cls.model_fields.items() if k in include and k not in exclude}
+                for field_info in fields.values():
+                    field_info.annotation = update_type(field_info.annotation)
+            else:
+                fields = {k: v for k, v in view_cls.model_fields.items() if k in include and k not in exclude}
 
-            __validators__ = {}
+            view_cls.model_fields = fields
 
-            for attr_name, attr in cls.__dict__.items():
-                # fmt: off
-                if (
-                    getattr(attr, "__pydantic_view_is_field_validator__", None)
-                    and name in attr.__pydantic_view_validator_view_names__
-                ):  # fmt: on
-                    __validators__[attr_name] = field_validator(
-                        *attr.__pydantic_view_validator_args__,
-                        **attr.__pydantic_view_validator_kwds__,
-                    )(attr)
-                # fmt: off
-                elif (
-                    getattr(attr, "__pydantic_view_is_model_validator__", None)
-                    and name in attr.__pydantic_view_model_validator_view_names__
-                ):  # fmt: on
-                    __validators__[attr_name] = model_validator(
-                        *attr.__pydantic_view_model_validator_args__,
-                        **attr.__pydantic_view_model_validator_kwds__,
-                    )(attr)
+            def find_fields_schema(schema):
+                if schema["type"] != "model-fields":
+                    return find_fields_schema(schema["schema"])
+                return schema
 
-            view_cls_name = f"{cls.__name__}{name}"
+            model_schema = view_cls.__pydantic_core_schema__["schema"]
+            fields_schema = find_fields_schema(model_schema)
 
-            __cls_kwargs__ = {}
-            if extra:
-                __cls_kwargs__["extra"] = extra
+            fields_schema["fields"] = {k: v for k, v in fields_schema["fields"].items() if k in fields}
 
-            view_cls = create_model(
-                view_cls_name,
-                __module__=cls.__module__,
-                __base__=(__base__,),
-                __validators__=__validators__,
-                __cls_kwargs__=__cls_kwargs__,
-                **__fields__,
-            )
+            def find_ref(schema):
+                if schema["type"] != "model":
+                    return find_fields_schema(schema["schema"])
+                return schema["ref"]
+
+            for k, v in root_cls.__dict__.items():
+                if (info := getattr(v, "__pydantic_view_field_validator__", None)) is not None:
+                    fn = getattr(root_cls, k)
+                    if info["view_names"] is None or name in info["view_names"]:
+                        view_cls.__pydantic_decorators__.field_validators[v.__name__] = Decorator(
+                            cls_ref=find_ref(view_cls.__pydantic_core_schema__),
+                            cls_var_name=v.__name__,
+                            func=fn,
+                            shim=None,
+                            info=field_validator(*info["args"], **info["kwds"])(v).decorator_info,
+                        )
+                elif (info := getattr(v, "__pydantic_view_model_validator__", None)) is not None:
+                    fn = getattr(root_cls, k)
+                    if info["view_names"] is None or name in info["view_names"]:
+                        view_cls.__pydantic_decorators__.model_validators[v.__name__] = Decorator(
+                            cls_ref=find_ref(view_cls.__pydantic_core_schema__),
+                            cls_var_name=v.__name__,
+                            func=fn,
+                            shim=None,
+                            info=model_validator(**info["kwds"])(v).decorator_info,
+                        )
+
+            view_cls.model_rebuild(force=True)
 
             class ViewRootClsDesc:
                 def __get__(self, obj, owner=None):
-                    return cls
+                    return root_cls
 
             class ViewNameClsDesc:
                 def __get__(self, obj, owner=None):
@@ -189,136 +151,100 @@ def view(
             setattr(view_cls, "__pydantic_view_name__", ViewNameClsDesc())
             setattr(view_cls, "__pydantic_view_root_cls__", ViewRootClsDesc())
 
-            view_cls.model_fields = {
-                k: v for k, v in view_cls.model_fields.items() if k in include and k not in exclude
-            }
+            if attach:
 
-            def find_model_schema(definitions):
-                for definition in definitions:
-                    if definition["type"] == "model" and definition["cls"] == view_cls:
-                        return definition
-                    schema = definition
-                    while schema := schema.get("schema"):
-                        if schema["type"] == "model" and schema["cls"] == view_cls:
-                            return schema
+                class ViewDesc:
+                    def __get__(self, obj, owner=None):
+                        if obj:
 
-            model_schema = find_model_schema(view_cls.__pydantic_core_schema__["definitions"])
-            if model_schema is None:
-                raise SchemaNotFoundError(name)
+                            def view_factory():
+                                return view_cls(
+                                    **obj.model_dump(
+                                        include=include or None,
+                                        exclude=exclude or None,
+                                        exclude_unset=True,
+                                    )
+                                )
 
-            def find_fields_schema(schema):
-                if schema["type"] != "model-fields":
-                    return find_fields_schema(schema["schema"])
-                return schema
+                            view_factory.__pydantic_view_name__ = name
+                            view_factory.__pydantic_view_root_cls__ = root_cls
 
-            fields_schema = find_fields_schema(model_schema["schema"])
+                            return view_factory
 
-            fields_schema["fields"] = {
-                k: v for k, v in fields_schema["fields"].items() if k in include and k not in exclude
-            }
+                        return view_cls
 
-            view_cls.model_rebuild(force=True)
+                setattr(root_cls, name, ViewDesc())
 
-            class ViewDesc:
-                def __get__(self, obj, owner=None):
-                    if obj:
-
-                        def view_factory():
-                            return view_cls(
-                                **{
-                                    k: v
-                                    for k, v in obj.model_dump(exclude_unset=True).items()
-                                    if k in include and k not in exclude
-                                }
-                            )
-
-                        view_factory.__pydantic_view_name__ = name
-                        view_factory.__pydantic_view_root_cls__ = cls
-
-                        return view_factory
-
-                    return view_cls
-
-            setattr(cls, name, ViewDesc())
-
-            if "__pydantic_view_kwds__" not in cls.__dict__:
-                setattr(cls, "__pydantic_view_kwds__", {})
-
-            cls.__pydantic_view_kwds__[name] = view_kwds
-
-            return cls
-
-        error = False
-
-        if not postpone:
-            try:
-                cls.__pydantic_core_schema__
-                return build_view(
-                    cls=cls,
-                    name=name,
-                    include=include,
-                    exclude=exclude,
-                    optional=optional,
-                    optional_not_none=optional_not_none,
-                    fields=fields,
-                    recursive=recursive,
-                    config=config,
-                )
-            except (PydanticUserError, SchemaNotFoundError) as e:
-                if isinstance(e, PydanticUserError) and "is not fully defined; you should define" not in f"{e}":
-                    raise e
-                error = True
-
-        if error or postpone:
-            if views_rebuild := getattr(cls, "views_rebuild", None):
-
-                def rebuild():
-                    views_rebuild()
-                    build_view(
-                        cls=cls,
-                        name=name,
-                        include=include,
-                        exclude=exclude,
-                        optional=optional,
-                        optional_not_none=optional_not_none,
-                        fields=fields,
-                        recursive=recursive,
-                        config=config,
-                    )
-
-                setattr(cls, "views_rebuild", rebuild)
-
+            if not hasattr(root_cls, "__pydantic_view_views__"):
+                setattr(root_cls, "__pydantic_view_views__", (view_cls,))
             else:
-                setattr(cls, "views_rebuild", build_view)
+                setattr(
+                    root_cls,
+                    "__pydantic_view_views__",
+                    tuple(
+                        x
+                        for x in root_cls.__pydantic_view_views__
+                        if x.__pydantic_view_name__ != view_cls.__pydantic_view_name__
+                    )
+                    + (view_cls,),
+                )
 
-            return cls
+            return view_cls
 
-    return wrapper
+        try:
+            build_view(root_cls, view_cls)
+        except PydanticUserError as e:
+            if not "is not fully defined; you should define" in f"{e}":
+                raise e
 
+        original_views_rebuild = getattr(root_cls, "views_rebuild", None)
+        if original_views_rebuild:
 
-def view_field_validator(view_names: List[str], field_name: str, *validator_args, **validator_kwds):
-    def wrapper(fn):
-        fn.__pydantic_view_is_field_validator__ = True
-        fn.__pydantic_view_validator_view_names__ = view_names
-        fn.__pydantic_view_validator_args__ = (field_name,) + validator_args
-        fn.__pydantic_view_validator_kwds__ = validator_kwds
-        return fn
+            def views_rebuild(cls):
+                original_views_rebuild()
+                build_view(root_cls, view_cls)
 
-    return wrapper
+        else:
 
+            def views_rebuild(cls):
+                build_view(root_cls, view_cls)
 
-def view_model_validator(view_names: List[str], *, mode: Literal["wrap", "before", "after"]):
-    def wrapper(fn):
-        fn.__pydantic_view_is_model_validator__ = True
-        fn.__pydantic_view_model_validator_view_names__ = view_names
-        fn.__pydantic_view_model_validator_args__ = ()
-        fn.__pydantic_view_model_validator_kwds__ = {"mode": mode}
-        return fn
+        setattr(root_cls, "views_rebuild", classmethod(views_rebuild))
+
+        return view_cls
 
     return wrapper
 
 
 def reapply_base_views(cls):
-    for view_kwds in getattr(cls, "__pydantic_view_kwds__", {}).values():
-        view(**view_kwds)(cls)
+    for view_cls in getattr(cls, "__pydantic_view_views__", ()):
+        if cls.__base__.__pydantic_generic_metadata__["args"]:
+            base = (view_cls[*cls.__base__.__pydantic_generic_metadata__["args"]], cls)
+        else:
+            base = (view_cls, cls)
+        new_view_cls = create_model(
+            f"_{cls.__name__}{view_cls.__pydantic_view_name__}",
+            __base__=base,
+            __module__=cls.__module__,
+        )
+        new_view_cls.model_config.update(view_cls.model_config)
+        setattr(new_view_cls, "__pydantic_view_root_cls__", cls)
+        view(force=True, **view_cls.__pydantic_view_params__)(new_view_cls)
+
     return cls
+
+
+def view_field_validator(view_names: set[str] | None = None, *args, **kwds):
+    def wrapper(fn):
+        fn.__pydantic_view_field_validator__ = {"view_names": view_names, "args": args, "kwds": kwds}
+        return fn
+
+    return wrapper
+
+
+def view_model_validator(view_names: set[str] | None = None, **kwds):
+    def wrapper(fn):
+        fn.__pydantic_view_model_validator__ = {"view_names": view_names, "kwds": kwds}
+        return fn
+
+    return wrapper

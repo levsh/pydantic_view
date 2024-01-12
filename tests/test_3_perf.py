@@ -6,16 +6,22 @@ from pydantic_view import view
 
 
 def test_perf():
-    @view("View")
     class SubModel(BaseModel):
         x: int = None
 
     @view("View")
+    class SubModelView(SubModel):
+        pass
+
     class Model(BaseModel):
         i: int
         f: float
         s: str
         sub: SubModel
+
+    @view("View")
+    class ModelView(Model):
+        pass
 
     print()
 
@@ -33,6 +39,6 @@ def test_perf():
 
         print(t2 / t1)
 
-        assert t2 / t1 < 5
+        assert t2 / t1 < 2
 
         print("-" * 50)
