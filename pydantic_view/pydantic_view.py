@@ -2,7 +2,7 @@ from copy import copy
 
 from pydantic import BaseModel, create_model, field_validator, model_validator
 from pydantic._internal._decorators import Decorator
-from pydantic.errors import PydanticUserError
+from pydantic.errors import PydanticUndefinedAnnotation, PydanticUserError
 
 
 def view(
@@ -96,6 +96,8 @@ def view(
                 fields = {k: copy(v) for k, v in view_cls.model_fields.items() if k in include and k not in exclude}
                 for field_info in fields.values():
                     field_info.annotation = update_type(field_info.annotation)
+                    if field_info.default_factory:
+                        field_info.default_factory = update_type(field_info.default_factory)
             else:
                 fields = {k: v for k, v in view_cls.model_fields.items() if k in include and k not in exclude}
 
@@ -196,6 +198,8 @@ def view(
         except PydanticUserError as e:
             if not "is not fully defined; you should define" in f"{e}":
                 raise e
+        except PydanticUndefinedAnnotation:
+            pass
 
         original_views_rebuild = getattr(root_cls, "views_rebuild", None)
         if original_views_rebuild:
