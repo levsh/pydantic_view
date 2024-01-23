@@ -69,7 +69,7 @@ def view(
 
             include = view_params["include"]
             if include is None:
-                include = set(root_cls.model_fields.keys())
+                include = set(view_cls.model_fields.keys())
             if base_view_params.get("include") is not None:
                 include &= base_view_params["include"]
 
