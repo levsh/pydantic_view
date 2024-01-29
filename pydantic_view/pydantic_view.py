@@ -1,4 +1,6 @@
 from copy import copy
+from types import UnionType
+from typing import Union
 
 from pydantic import BaseModel, create_model, field_validator, model_validator
 from pydantic._internal._decorators import Decorator
@@ -87,7 +89,9 @@ def view(
                         if hasattr(tp, "__metadata__")
                         else tuple(update_type(arg) for arg in tp.__args__),
                     )
-                elif isinstance(tp, type) and issubclass(tp, BaseModel):
+                if type(tp) == UnionType:
+                    return Union[tuple(update_type(arg) for arg in tp.__args__)]
+                if isinstance(tp, type) and issubclass(tp, BaseModel):
                     if hasattr(tp, name):
                         return getattr(tp, name)
                 return tp
@@ -238,7 +242,7 @@ def reapply_base_views(cls):
     return cls
 
 
-def view_field_validator(view_names: set[str] | None = None, *args, **kwds):
+def view_field_validator(view_names: set[str], *args, **kwds):
     def wrapper(fn):
         fn.__pydantic_view_field_validator__ = {"view_names": view_names, "args": args, "kwds": kwds}
         return fn
