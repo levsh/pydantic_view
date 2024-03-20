@@ -230,10 +230,12 @@ def reapply_base_views(cls):
             base = (view_cls[*cls.__base__.__pydantic_generic_metadata__["args"]], cls)
         else:
             base = (view_cls, cls)
+        fields = {k: (v.annotation, v) for k, v in cls.model_fields.items() if k in cls.__annotations__}
         new_view_cls = create_model(
             f"_{cls.__name__}{view_cls.__pydantic_view_name__}",
             __base__=base,
             __module__=cls.__module__,
+            **fields,
         )
         new_view_cls.model_config.update(view_cls.model_config)
         setattr(new_view_cls, "__pydantic_view_root_cls__", cls)
