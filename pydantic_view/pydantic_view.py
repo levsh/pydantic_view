@@ -1,3 +1,4 @@
+from collections.abc import Sequence
 from copy import copy
 from types import UnionType
 from typing import Union
@@ -81,27 +82,31 @@ def view(
             if base_view_params.get("exclude") is not None:
                 exclude |= base_view_params["exclude"]
 
-            def update_type(tp):
-                if hasattr(tp, "__origin__"):
+            def update_type(tp, view_names: Sequence[str]):
+                if getattr(tp, "__origin__", None) is not None:
                     return tp.__class__(
-                        update_type(tp.__origin__),
-                        tp.__metadata__
-                        if hasattr(tp, "__metadata__")
-                        else tuple(update_type(arg) for arg in tp.__args__),
+                        update_type(getattr(tp, "__origin__", tp), view_names),
+                        (
+                            tp.__metadata__
+                            if hasattr(tp, "__metadata__")
+                            else tuple(update_type(arg, view_names) for arg in tp.__args__)
+                        ),
                     )
-                if type(tp) == UnionType:
-                    return Union[tuple(update_type(arg) for arg in tp.__args__)]
+                if type(tp) == UnionType:  # pylint: disable=unidiomatic-typecheck
+                    return Union[tuple(update_type(arg, view_names) for arg in tp.__args__)]  # type: ignore
                 if isinstance(tp, type) and issubclass(tp, BaseModel):
-                    if hasattr(tp, name):
-                        return getattr(tp, name)
+                    for view_name in view_names:
+                        if hasattr(tp, view_name):
+                            return getattr(tp, view_name)
                 return tp
 
             if recursive is True:
+                view_names = recursive if isinstance(recursive, (list, tuple, set)) else [name]
                 fields = {k: copy(v) for k, v in view_cls.model_fields.items() if k in include and k not in exclude}
                 for field_info in fields.values():
-                    field_info.annotation = update_type(field_info.annotation)
+                    field_info.annotation = update_type(field_info.annotation, view_names)
                     if field_info.default_factory:
-                        field_info.default_factory = update_type(field_info.default_factory)
+                        field_info.default_factory = update_type(field_info.default_factory, view_names)
             else:
                 fields = {k: v for k, v in view_cls.model_fields.items() if k in include and k not in exclude}
 
@@ -122,7 +127,7 @@ def view(
                     return find_fields_schema(schema["schema"])
                 return schema["ref"]
 
-            for k, v in root_cls.__dict__.items():
+            for k, v in tuple(root_cls.__dict__.items()):
                 if (info := getattr(v, "__pydantic_view_field_validator__", None)) is not None:
                     fn = getattr(root_cls, k)
                     if info["view_names"] is None or name in info["view_names"]:
@@ -166,8 +171,8 @@ def view(
                             def view_factory():
                                 return view_cls(
                                     **obj.model_dump(
-                                        include=include or None,
-                                        exclude=exclude or None,
+                                        include=include,  # or None,
+                                        exclude=exclude,  # or None,
                                         exclude_unset=True,
                                     )
                                 )
