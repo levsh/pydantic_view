@@ -100,7 +100,7 @@ def view(
                             return getattr(tp, view_name)
                 return tp
 
-            if recursive is True:
+            if recursive:
                 view_names = recursive if isinstance(recursive, (list, tuple, set)) else [name]
                 fields = {k: copy(v) for k, v in view_cls.model_fields.items() if k in include and k not in exclude}
                 for field_info in fields.values():
