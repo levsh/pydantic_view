@@ -102,12 +102,14 @@ def view(
 
             if recursive:
                 view_names = recursive if isinstance(recursive, (list, tuple, set)) else [name]
+                view_cls.__pydantic_view_recursive_views__ = tuple(view_names)
                 fields = {k: copy(v) for k, v in view_cls.model_fields.items() if k in include and k not in exclude}
                 for field_info in fields.values():
                     field_info.annotation = update_type(field_info.annotation, view_names)
                     if field_info.default_factory:
                         field_info.default_factory = update_type(field_info.default_factory, view_names)
             else:
+                view_cls.__pydantic_view_recursive_views__ = None
                 fields = {k: v for k, v in view_cls.model_fields.items() if k in include and k not in exclude}
 
             view_cls.model_fields = fields
