@@ -207,7 +207,7 @@ def view(
         try:
             build_view(root_cls, view_cls)
         except PydanticUserError as e:
-            if not "is not fully defined; you should define" in f"{e}":
+            if "is not fully defined; you should define" not in f"{e}":
                 raise e
         except PydanticUndefinedAnnotation:
             pass
